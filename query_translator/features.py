@@ -79,7 +79,8 @@ class FeatureExtractor(object):
                  generic_features,
                  n_gram_features,
                  relation_score_model=None,
-                 entity_features=True):
+                 entity_features=True,
+                 text_features=False):
         self.generic_features = generic_features
         self.n_gram_features = n_gram_features
         # If we use n-gram features this is set before to determine relevant
@@ -89,6 +90,10 @@ class FeatureExtractor(object):
         # and the resulting score is added as an extracted feature.
         self.relation_score_model = relation_score_model
         self.entity_features = entity_features
+        self.text_feature_generator = None
+        if text_features:
+            from text2kb.websearch_features import WebSearchFeatureGenerator
+            self.text_feature_generator = WebSearchFeatureGenerator.init_from_config()
 
     def extract_features(self, candidate):
         """Extract features from the query candidate.
@@ -236,6 +241,10 @@ class FeatureExtractor(object):
         if self.relation_score_model:
             rank_score = self.relation_score_model.score(candidate)
             features['relation_score'] = rank_score.score
+
+        # TODO(denxx): I should probably check that the answers list isn't too long?..
+        if self.text_feature_generator:
+            features += self.text_feature_generator(candidate)
         return features
 
     def extract_ngram_features(self, candidate):

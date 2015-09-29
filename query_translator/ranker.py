@@ -164,6 +164,7 @@ class AccuModel(MLModel, Ranker):
                  train_dataset,
                  top_ngram_percentile=5,
                  rel_regularization_C=None,
+                 extract_text_features=False,
                  **kwargs):
         MLModel.__init__(self, name, train_dataset)
         Ranker.__init__(self, name, **kwargs)
@@ -183,7 +184,8 @@ class AccuModel(MLModel, Ranker):
         # Only extract ngram features.
         self.feature_extractor = FeatureExtractor(True,
                                                   False,
-                                                  None)
+                                                  None,
+                                                  text_features=extract_text_features)
 
     def load_model(self):
         model_file = self.get_model_filename()
