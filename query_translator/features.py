@@ -241,11 +241,12 @@ class FeatureExtractor(object):
             features['relation_score'] = rank_score.score
 
         # TODO(denxx): I should probably check that the answers list isn't too long?..
-        if self.generate_text_features:
-            if not self.text_feature_generator:
-                from text2kb.websearch_features import WebSearchFeatureGenerator
-                self.text_feature_generator = WebSearchFeatureGenerator.init_from_config()
-            features.update(self.text_feature_generator.generate_features(candidate))
+        if result_size < 5:
+            if self.generate_text_features:
+                if not self.text_feature_generator:
+                    from text2kb.websearch_features import WebSearchFeatureGenerator
+                    self.text_feature_generator = WebSearchFeatureGenerator.init_from_config()
+                features.update(self.text_feature_generator.generate_features(candidate))
         return features
 
     def extract_ngram_features(self, candidate):

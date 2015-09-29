@@ -49,6 +49,8 @@ class WebSearchResult:
                     content = input_document.read()
                     return content
                     # return extract_text(content)
+            else:
+                logger.warning("Document not found: " + str(self.document_location))
         except Exception as exc:
             logger.warning(exc)
         return ""
@@ -117,8 +119,9 @@ class WebSearchFeatureGenerator:
 
         answers_doc_counts = [0, ] * len(answers)
         answers_snip_counts = [0, ] * len(answers)
-        if candidate.query in self.question_serps:
-            for doc in self.question_serps[candidate.query]:
+        question = candidate.query.original_query
+        if question in self.question_serps:
+            for doc in self.question_serps[question]:
                 document_content = doc.content()
                 for i, answer in enumerate(answers):
                     if contains_answer(document_content, answer):
@@ -126,8 +129,6 @@ class WebSearchFeatureGenerator:
                     if contains_answer(doc.snippet, answer):
                         answers_snip_counts[i] += 1
 
-        if sum(answers_doc_counts) > 0:
-            logger.info("FOUND NON-ZERO FEATURE:" + str(answers_doc_counts))
         return {'search_doc_count': 1.0 * sum(answers_doc_counts) / len(answers),
                 'search_snippets_count': 1.0 * sum(answers_snip_counts) / len(answers)}
 
