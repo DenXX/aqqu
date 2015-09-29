@@ -333,7 +333,12 @@ class QueryCandidate:
         :return:
         """
         self.__dict__.update(d)
-        self.sparql_backend = None
+
+        # TODO(denxx): Remove this
+        #self.sparql_backend = None
+        config_options = globals.config
+        self.sparql_backend = globals.get_sparql_backend(config_options)
+
         self.extension_history = []
 
     def get_result_count(self, use_cached_value=True):
