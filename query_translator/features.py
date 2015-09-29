@@ -245,7 +245,7 @@ class FeatureExtractor(object):
             if not self.text_feature_generator:
                 from text2kb.websearch_features import WebSearchFeatureGenerator
                 self.text_feature_generator = WebSearchFeatureGenerator.init_from_config()
-            features += self.text_feature_generator(candidate)
+            features += self.text_feature_generator.generate_features(candidate)
         return features
 
     def extract_ngram_features(self, candidate):
