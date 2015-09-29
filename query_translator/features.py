@@ -91,9 +91,7 @@ class FeatureExtractor(object):
         self.relation_score_model = relation_score_model
         self.entity_features = entity_features
         self.text_feature_generator = None
-        if text_features:
-            from text2kb.websearch_features import WebSearchFeatureGenerator
-            self.text_feature_generator = WebSearchFeatureGenerator.init_from_config()
+        self.generate_text_features = text_features
 
     def extract_features(self, candidate):
         """Extract features from the query candidate.
@@ -243,7 +241,10 @@ class FeatureExtractor(object):
             features['relation_score'] = rank_score.score
 
         # TODO(denxx): I should probably check that the answers list isn't too long?..
-        if self.text_feature_generator:
+        if self.generate_text_features:
+            if not self.text_feature_generator:
+                from text2kb.websearch_features import WebSearchFeatureGenerator
+                self.text_feature_generator = WebSearchFeatureGenerator.init_from_config()
             features += self.text_feature_generator(candidate)
         return features
 
