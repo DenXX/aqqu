@@ -57,7 +57,8 @@ class WebSearchResult:
 
 
 def contains_answer(text, answer):
-    tokens = answer.lower().split()
+    text = text.encode('utf-8')
+    tokens = answer.encode('utf-8').lower().split()
     return 1.0 * sum((1 if token in text else 0 for token in tokens)) / len(tokens) > 0.7
 
 
