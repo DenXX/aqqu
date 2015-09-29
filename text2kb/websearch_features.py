@@ -54,6 +54,11 @@ class WebSearchResult:
         return ""
 
 
+def contains_answer(text, answer):
+    tokens = answer.lower().split()
+    return 1.0 * sum((1 if token in text else 0 for token in tokens)) / len(tokens) > 0.7
+
+
 class WebSearchFeatureGenerator:
     def __init__(self, serp_file, documents_file):
         """
@@ -98,28 +103,29 @@ class WebSearchFeatureGenerator:
         train_documents_file = config_options.get('WebSearchFeatures', 'train-documents-file')
         test_serp_file = config_options.get('WebSearchFeatures', 'test-serp-file')
         test_documents_file = config_options.get('WebSearchFeatures', 'test-documents-file')
-        logger.info("Reading web search results for training data...")
+        logger.info("Reading web search results data...")
         res = WebSearchFeatureGenerator(train_serp_file, train_documents_file)
-        logger.info("Reading web search results for testing data...")
         res._read_serp_files(test_serp_file, test_documents_file)
         return res
 
     def generate_features(self, candidate):
         answers = [answer[1] if len(answer) > 1 and answer[1] else answer[0]
                    for answer in candidate.get_result(include_name=True)]
-        logger.info("CANDIDATE ANSWERS:" + str(answers))
-        features = {'snippet_contains': 0, 'text_contains': 0}
+        answers_doc_counts = [0, ] * len(answers)
+        answers_snip_counts = [0, ] * len(answers)
         if candidate.query in self.question_serps:
             for doc in self.question_serps[candidate.query]:
-                text = doc.content().lower()
-                features['snippet_contains'] =\
-                    max(features['snippet_contains'],
-                        1.0 * sum(1 for answer in answers if answer in doc.snippet) / len(answers))
-                features['text_contains'] =\
-                    max(features['text_contains'],
-                        1.0 * sum(1 for answer in answers if answer in text) / len(answers))
-        logger.info("TEXT BASED FEATURES:" + str(features))
-        return features
+                document_content = doc.content()
+                for i, answer in enumerate(answers):
+                    if contains_answer(document_content, answer):
+                        answers_doc_counts[i] += 1
+                    if contains_answer(doc.snippet, answer):
+                        answers_snip_counts[i] += 1
+
+        if sum(answers_doc_counts) > 0:
+            logger.info("FOUND NON-ZERO FEATURE:" + str(answers_doc_counts))
+        return {'search_doc_count': 1.0 * sum(answers_doc_counts) / len(answers),
+                'search_snippets_count': 1.0 * sum(answers_snip_counts) / len(answers)}
 
 
 if __name__ == "__main__":
