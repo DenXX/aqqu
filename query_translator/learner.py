@@ -11,6 +11,7 @@ Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 """
 import logging
 import globals
+import scorer_globals
 from query_translator.ranker import MLModel
 from query_translator.translator import QueryTranslator
 from evaluation import EvaluationQuery, load_eval_queries, \
@@ -196,7 +197,6 @@ def train(scorer_name, cached):
     :return:
     """
     try:
-        import scorer_globals
         scorer_obj = scorer_globals.scorers_dict[scorer_name]
     except KeyError:
         logger.error("Unknown scorer: %s" % scorer_name)
@@ -222,7 +222,6 @@ def test(scorer_name, test_dataset, cached, avg_runs=1):
     :param cached:
     :return:
     """
-    import scorer_globals
     scorer_obj = scorer_globals.scorers_dict[scorer_name]
     # Not all rankers are MLModels
     if isinstance(scorer_obj, MLModel):
@@ -258,7 +257,6 @@ def cv(scorer_name, dataset, cached, n_folds=6, avg_runs=1):
     :param cached:
     :return:
     """
-    import scorer_globals
     scorer_obj = scorer_globals.scorers_dict[scorer_name]
     # Split the queries into n_folds
 
@@ -341,6 +339,7 @@ def main():
     args = parser.parse_args()
     # Read global config.
     globals.read_configuration(args.config)
+    scorer_globals.init()
     # Fix randomness.
     random.seed(999)
     use_cache = not args.no_cached

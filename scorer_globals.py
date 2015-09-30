@@ -8,42 +8,8 @@ from collections import OrderedDict
 
 free917_entities = "evaluation-data/free917_entities.txt"
 
-# The scorers that can be selected.
-scorer_list = [ranker.AccuModel('F917_Ranker',
-                                 "free917train",
-                                 top_ngram_percentile=2,
-                                 rel_regularization_C=0.002),
-               ranker.AccuModel('F917_Ranker_entity_oracle',
-                                 "free917train",
-                                 entity_oracle_file=free917_entities,
-                                 top_ngram_percentile=2,
-                                 rel_regularization_C=1.0),
-               ranker.AccuModel('WQ_Ranker',
-                                 "webquestionstrain",
-                                 top_ngram_percentile=5,
-                                 rel_regularization_C=1.0),
-               ranker.AccuModel('WQ_Ranker_WithText',
-                                 "webquestionstrain",
-                                 top_ngram_percentile=5,
-                                 rel_regularization_C=1.0,
-                                 extract_text_features=True),
-               ranker.AccuModel('WQ_Ranker_WithText_small',
-                                 "webquestions_small_train",
-                                 top_ngram_percentile=5,
-                                 rel_regularization_C=1.0,
-                                 extract_text_features=True),
-               ranker.SimpleScoreRanker('SimpleRanker'),
-               ranker.SimpleScoreRanker('SimpleRanker_entity_oracle',
-                                         entity_oracle_file=free917_entities),
-               ranker.LiteralRanker('LiteralRanker'),
-               ranker.LiteralRanker('LiteralRanker_entity_oracle',
-                                     entity_oracle_file=free917_entities),
-               ]
-
-# A dictionary used for lookup via scorer name.
-scorers_dict = OrderedDict(
-    [(s.name, s) for s in scorer_list]
-)
+scorer_list = None
+scorers_dict = None
 
 # A dict of dataset name and file.
 DATASETS = OrderedDict(
@@ -94,3 +60,44 @@ DATASETS = OrderedDict(
       'webquestions.test_small.json'),
      ]
 )
+
+
+def init():
+    # The scorers that can be selected.
+    global scorer_list
+    global scorers_dict
+    scorer_list = [ranker.AccuModel('F917_Ranker',
+                                     "free917train",
+                                     top_ngram_percentile=2,
+                                     rel_regularization_C=0.002),
+                   ranker.AccuModel('F917_Ranker_entity_oracle',
+                                     "free917train",
+                                     entity_oracle_file=free917_entities,
+                                     top_ngram_percentile=2,
+                                     rel_regularization_C=1.0),
+                   ranker.AccuModel('WQ_Ranker',
+                                     "webquestionstrain",
+                                     top_ngram_percentile=5,
+                                     rel_regularization_C=1.0),
+                   ranker.AccuModel('WQ_Ranker_WithText',
+                                     "webquestionstrain",
+                                     top_ngram_percentile=5,
+                                     rel_regularization_C=1.0,
+                                     extract_text_features=True),
+                   ranker.AccuModel('WQ_Ranker_WithText_small',
+                                     "webquestions_small_train",
+                                     top_ngram_percentile=5,
+                                     rel_regularization_C=1.0,
+                                     extract_text_features=True),
+                   ranker.SimpleScoreRanker('SimpleRanker'),
+                   ranker.SimpleScoreRanker('SimpleRanker_entity_oracle',
+                                             entity_oracle_file=free917_entities),
+                   ranker.LiteralRanker('LiteralRanker'),
+                   ranker.LiteralRanker('LiteralRanker_entity_oracle',
+                                         entity_oracle_file=free917_entities),
+                   ]
+
+    # A dictionary used for lookup via scorer name.
+    scorers_dict = OrderedDict(
+        [(s.name, s) for s in scorer_list]
+    )
