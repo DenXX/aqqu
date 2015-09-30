@@ -114,8 +114,7 @@ class WebSearchFeatureGenerator:
         return res
 
     def generate_features(self, candidate):
-        answers = [answer[1] if len(answer) > 1 and answer[1] else answer[0]
-                   for answer in candidate.query_results]
+        answers = candidate.query_results
 
         if len(answers) == 0:
             return {'search_doc_count': 0.0, 'search_snippets_count': 0.0}
