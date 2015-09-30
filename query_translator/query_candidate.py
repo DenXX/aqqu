@@ -301,6 +301,7 @@ class QueryCandidate:
         self.cached_result_count = -1
         # An indicator whether the candidate matches the answer type
         self.matches_answer_type = None
+        self.query_results = None
 
     def get_relation_names(self):
         return sorted([r.name for r in self.relations])
@@ -324,6 +325,7 @@ class QueryCandidate:
         d = dict(self.__dict__)
         del d['sparql_backend']
         del d['extension_history']
+        del d['query_results']
         return d
 
     def __setstate__(self, d):
@@ -333,12 +335,8 @@ class QueryCandidate:
         :return:
         """
         self.__dict__.update(d)
-
-        # TODO(denxx): Remove this
-        #self.sparql_backend = None
-        config_options = globals.config
-        self.sparql_backend = globals.get_sparql_backend(config_options)
-
+        self.sparql_backend = None
+        self.query_results = None
         self.extension_history = []
 
     def get_result_count(self, use_cached_value=True):
@@ -378,8 +376,8 @@ class QueryCandidate:
         :return:
         """
         sparql_query = self.to_sparql_query(include_name=include_name)
-        query_result = self.sparql_backend.query_json(sparql_query)
-        return query_result
+        self.query_results = self.sparql_backend.query_json(sparql_query)
+        return self.query_results
 
     def get_relation_suggestions(self):
         """

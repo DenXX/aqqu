@@ -179,6 +179,12 @@ def get_evaluated_queries(dataset, cached, parameters, n_top=2000):
                                          output_result=False)
         if cached:
             cache_evaluated_queries(dataset, queries, parameters)
+
+    # Setting the correct result to the candidate queries.
+    for q in queries:
+        for eq in q.eval_candidates:
+            eq.query_candidate.query_results = eq.prediction
+
     return queries
 
 
