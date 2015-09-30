@@ -30,6 +30,7 @@ def main():
                         help="The configuration file to use.")
     args = parser.parse_args()
     globals.read_configuration(args.config)
+    scorer_globals.init()
     if args.ranker_name not in scorer_globals.scorers_dict:
         logger.error("%s is not a valid ranker" % args.ranker_name)
         logger.error("Valid rankers are: %s " % (" ".join(scorer_globals.scorers_dict.keys())))

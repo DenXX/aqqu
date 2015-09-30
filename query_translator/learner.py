@@ -339,6 +339,7 @@ def main():
     args = parser.parse_args()
     # Read global config.
     globals.read_configuration(args.config)
+    scorer_globals.init()
     # Fix randomness.
     random.seed(999)
     use_cache = not args.no_cached
