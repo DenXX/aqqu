@@ -1,4 +1,5 @@
 from __future__ import print_function
+from query_translator.query_candidate import QueryCandidate
 
 __author__ = 'dsavenk'
 
@@ -45,7 +46,8 @@ class WebSearchResult:
         """
         try:
             if os.path.isfile(self.document_location):
-                with open(self.document_location, 'r') as input_document:
+                import codecs
+                with codecs.open(self.document_location, 'r', 'utf-8') as input_document:
                     content = input_document.read()
                     return content
                     # return extract_text(content)
@@ -57,8 +59,8 @@ class WebSearchResult:
 
 
 def contains_answer(text, answer):
-    text = text.encode('utf-8')
-    tokens = answer.encode('utf-8').lower().split()
+    text = text.lower()
+    tokens = answer.lower().split()
     return 1.0 * sum((1 if token in text else 0 for token in tokens)) / len(tokens) > 0.7
 
 
@@ -135,4 +137,6 @@ class WebSearchFeatureGenerator:
 
 
 if __name__ == "__main__":
+    import sys
+    feature_generator = WebSearchFeatureGenerator(sys.argv[1], sys.argv[2])
     pass
