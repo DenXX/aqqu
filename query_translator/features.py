@@ -92,10 +92,7 @@ class FeatureExtractor(object):
         self.entity_features = entity_features
         self.text_feature_generator = None
         self.generate_text_features = text_features
-        if text_features:
-            from text2kb.websearch_features import WebSearchFeatureGenerator
-            self.text_feature_generator = WebSearchFeatureGenerator.init_from_config()
-
+        self.text_feature_generator = None
 
     def extract_features(self, candidate):
         """Extract features from the query candidate.
@@ -246,6 +243,9 @@ class FeatureExtractor(object):
 
         # TODO(denxx): I should probably check that the answers list isn't too long?..
         if self.generate_text_features:
+            if self.text_feature_generator == None:
+                from text2kb.websearch_features import WebSearchFeatureGenerator
+                self.text_feature_generator = WebSearchFeatureGenerator.init_from_config()
             features.update(self.text_feature_generator.generate_features(candidate))
         return features
 
