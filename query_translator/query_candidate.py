@@ -325,7 +325,6 @@ class QueryCandidate:
         d = dict(self.__dict__)
         del d['sparql_backend']
         del d['extension_history']
-        del d['query_results']
         return d
 
     def __setstate__(self, d):
@@ -336,7 +335,6 @@ class QueryCandidate:
         """
         self.__dict__.update(d)
         self.sparql_backend = None
-        self.query_results = None
         self.extension_history = []
 
     def get_result_count(self, use_cached_value=True):
