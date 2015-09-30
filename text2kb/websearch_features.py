@@ -28,6 +28,11 @@ def extract_text(html_text):
     return '\n'.join(chunk for chunk in chunks if chunk)
 
 
+def contains_answer(text, answer):
+    tokens = answer.lower().split()
+    return 1.0 * sum((1 if token in text else 0 for token in tokens)) / len(tokens) > 0.7
+
+
 class WebSearchResult:
     """
     Represents a search results. It lazily reads document content
@@ -56,12 +61,6 @@ class WebSearchResult:
         except Exception as exc:
             logger.warning(exc)
         return ""
-
-
-def contains_answer(text, answer):
-    text = text.lower()
-    tokens = answer.lower().split()
-    return 1.0 * sum((1 if token in text else 0 for token in tokens)) / len(tokens) > 0.7
 
 
 class WebSearchFeatureGenerator:
@@ -123,12 +122,14 @@ class WebSearchFeatureGenerator:
         answers_snip_counts = [0, ] * len(answers)
         question = candidate.query.original_query
         if question in self.question_serps:
-            for doc in self.question_serps[question]:
-                document_content = doc.content()
+            # TODO(denxx): need to keep top-50 if possible.
+            for doc in self.question_serps[question][:10]:
+                document_content = set(doc.content().lower().split())
+                document_snippet = set(doc.snippet.lower().split())
                 for i, answer in enumerate(answers):
                     if contains_answer(document_content, answer):
                         answers_doc_counts[i] += 1
-                    if contains_answer(doc.snippet, answer):
+                    if contains_answer(document_snippet, answer):
                         answers_snip_counts[i] += 1
 
         return {'search_doc_count': 1.0 * sum(answers_doc_counts) / len(answers),
