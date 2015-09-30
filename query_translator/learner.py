@@ -12,7 +12,6 @@ Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 import logging
 import globals
 from query_translator.ranker import MLModel
-import scorer_globals
 from query_translator.translator import QueryTranslator
 from evaluation import EvaluationQuery, load_eval_queries, \
     evaluate_translator, evaluate
@@ -197,6 +196,7 @@ def train(scorer_name, cached):
     :return:
     """
     try:
+        import scorer_globals
         scorer_obj = scorer_globals.scorers_dict[scorer_name]
     except KeyError:
         logger.error("Unknown scorer: %s" % scorer_name)
@@ -222,6 +222,7 @@ def test(scorer_name, test_dataset, cached, avg_runs=1):
     :param cached:
     :return:
     """
+    import scorer_globals
     scorer_obj = scorer_globals.scorers_dict[scorer_name]
     # Not all rankers are MLModels
     if isinstance(scorer_obj, MLModel):
@@ -257,6 +258,7 @@ def cv(scorer_name, dataset, cached, n_folds=6, avg_runs=1):
     :param cached:
     :return:
     """
+    import scorer_globals
     scorer_obj = scorer_globals.scorers_dict[scorer_name]
     # Split the queries into n_folds
 
