@@ -27,6 +27,11 @@ scorer_list = [ranker.AccuModel('F917_Ranker',
                                  top_ngram_percentile=5,
                                  rel_regularization_C=1.0,
                                  extract_text_features=True),
+               ranker.AccuModel('WQ_Ranker_WithText_small',
+                                 "webquestions_small_train",
+                                 top_ngram_percentile=5,
+                                 rel_regularization_C=1.0,
+                                 extract_text_features=True),
                ranker.SimpleScoreRanker('SimpleRanker'),
                ranker.SimpleScoreRanker('SimpleRanker_entity_oracle',
                                          entity_oracle_file=free917_entities),
@@ -81,5 +86,11 @@ DATASETS = OrderedDict(
      ('webquestionstrain_graphparser',
       'evaluation-data/'
       'webquestions.train_graphparser.json'),
+     ('webquestions_small_train',
+      'evaluation-data/'
+      'webquestions.train_small.json'),
+     ('webquestions_small_test',
+      'evaluation-data/'
+      'webquestions.test_small.json'),
      ]
 )
