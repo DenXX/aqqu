@@ -186,6 +186,10 @@ class AccuModel(MLModel, Ranker):
                                                   False,
                                                   None,
                                                   text_features=extract_text_features)
+        self.prune_feature_extractor = FeatureExtractor(True,
+                                                        False,
+                                                        None,
+                                                        entity_features=True)
 
     def load_model(self):
         model_file = self.get_model_filename()
@@ -200,8 +204,9 @@ class AccuModel(MLModel, Ranker):
                                                   percentile=self.top_ngram_percentile)
             relation_scorer.load_model()
             self.feature_extractor.relation_score_model = relation_scorer
+            self.prune_feature_extractor.relation_score_model = relation_scorer
             pruner = CandidatePruner(self.get_model_name(),
-                                     relation_scorer)
+                                     self.prune_feature_extractor)
             pruner.load_model()
             self.pruner = pruner
             self.dict_vec = dict_vec
@@ -221,7 +226,7 @@ class AccuModel(MLModel, Ranker):
 
     def learn_prune_model(self, labels, features):
         prune_model = CandidatePruner(self.get_model_name(),
-                                      self.relation_scorer)
+                                      self.prune_feature_extractor)
         prune_model.learn_model(labels, features)
         return prune_model
 
@@ -255,7 +260,7 @@ class AccuModel(MLModel, Ranker):
                 self.feature_extractor)
             testfold_features, testfold_labels = construct_examples(
                 test_fold,
-                self.feature_extractor)
+                self.prune_feature_extractor)
             features.extend(testfold_features)
             labels.extend(testfold_labels)
             pair_features.extend(testfoldpair_features)
@@ -265,6 +270,7 @@ class AccuModel(MLModel, Ranker):
         logger.info("Training final relation scorer.")
         rel_model = self.learn_rel_score_model(train_queries)
         self.feature_extractor.relation_score_model = rel_model
+        self.prune_feature_extractor.relation_score_model = rel_model
         self.relation_scorer = rel_model
         self.pruner = self.learn_prune_model(labels, features)
         self.learn_ranking_model(pair_features, pair_labels)
@@ -429,7 +435,7 @@ class CandidatePruner(MLModel):
 
     def __init__(self,
                  name,
-                 rel_score_model):
+                 feature_extractor):
         name += self.get_pruner_suffix()
         MLModel.__init__(self, name, None)
         # Note: The model is lazily when needed.
@@ -439,10 +445,7 @@ class CandidatePruner(MLModel):
         self.scaler = None
         # The index of the correct label.
         self.correct_index = -1
-        self.feature_extractor = FeatureExtractor(True,
-                                                  False,
-                                                  relation_score_model=rel_score_model,
-                                                  entity_features=True)
+        self.feature_extractor = feature_extractor
 
     def get_pruner_suffix(self):
         return "_Pruner"
