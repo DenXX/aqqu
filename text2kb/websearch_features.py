@@ -73,6 +73,7 @@ class WebSearchFeatureGenerator:
 
         self.question_serps = dict()
         self._read_serp_files(serp_file, documents_file)
+        self._document_cache = dict()
 
     def _read_serp_files(self, serp_file, documents_file):
         # Read a file with search results
@@ -124,7 +125,11 @@ class WebSearchFeatureGenerator:
         if question in self.question_serps:
             # TODO(denxx): need to keep top-50 if possible.
             for doc in self.question_serps[question][:10]:
-                document_content = set(doc.content().lower().split())
+                if doc.document_location not in self._document_cache:
+                    document_content = set(doc.content().lower().split())
+                    self._document_cache[doc.document_location] = document_content
+
+                document_content = self._document_cache[doc.doc.document_location]
                 document_snippet = set(doc.snippet.lower().split())
                 for i, answer in enumerate(answers):
                     if contains_answer(document_content, answer):
