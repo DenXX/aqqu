@@ -1,12 +1,16 @@
 from __future__ import print_function
+from corenlp_parser.parser import CoreNLPParser
+from entity_linker.entity_linker import EntityLinker
 from query_translator.query_candidate import QueryCandidate
 
 __author__ = 'dsavenk'
 
 import json
 import logging
+import re
 import os.path
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
+import justext
 
 import globals
 
@@ -15,17 +19,21 @@ logger = logging.getLogger(__name__)
 
 def extract_text(html_text):
     html = BeautifulSoup(html_text, 'html5lib')
-    for script in html(["script", "style"]):
-        script.extract()  # rip it out
+
+    texts = html.findAll(text=True)
+
+    def visible(element):
+        if element.parent.name in ['style', 'script', '[document]', 'title']:
+            return False
+        elif isinstance(element, Comment):
+            return False
+        return len(element.string.strip()) > 0 and not element.string.strip().startswith("<")
+
+    visible_texts = filter(visible, texts)
 
     # get text
-    text = html.get_text()
-    # break into lines and remove leading and trailing space on each
-    lines = (line.strip() for line in text.splitlines())
-    # break multi-headlines into a line each
-    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    # drop blank lines
-    return '\n'.join(chunk for chunk in chunks if chunk)
+    text = [line.strip() for element in visible_texts for line in element.string.splitlines() if len(line.strip()) > 0]
+    return '\n'.join(text)
 
 
 def contains_answer(text, answer):
@@ -54,7 +62,12 @@ class WebSearchResult:
                 import codecs
                 with codecs.open(self.document_location, 'r', 'utf-8') as input_document:
                     content = input_document.read()
-                    return content
+                    text = justext.justext(content, justext.get_stoplist("English"))
+                    res = []
+                    for paragraph in text:
+                        if not paragraph.is_boilerplate:
+                            res.append(paragraph.text)
+                    return '\n'.join(res)
                     # return extract_text(content)
             else:
                 logger.warning("Document not found: " + str(self.document_location))
@@ -74,6 +87,9 @@ class WebSearchFeatureGenerator:
         self.question_serps = dict()
         self._read_serp_files(serp_file, documents_file)
         self._document_cache = dict()
+        self._document_entities_cache = dict()
+        self.entity_linker = EntityLinker.init_from_config()
+        self.parser = CoreNLPParser.init_from_config()
 
     def _read_serp_files(self, serp_file, documents_file):
         # Read a file with search results
@@ -117,31 +133,49 @@ class WebSearchFeatureGenerator:
         answers = candidate.query_results
 
         if len(answers) == 0:
-            return {'search_doc_count': 0.0, 'search_snippets_count': 0.0}
+            return {'search_doc_count': 0.0, 'search_snippets_count': 0.0, 'search_doc_entity_count': 0.0}
 
         answers_doc_counts = [0, ] * len(answers)
         answers_snip_counts = [0, ] * len(answers)
+        answers_entities_counts = [0, ] * len(answers)
         question = candidate.query.original_query
         if question in self.question_serps:
             # TODO(denxx): need to keep top-50 if possible.
             for doc in self.question_serps[question][:10]:
                 if doc.document_location not in self._document_cache:
-                    document_content = set(doc.content().lower().split())
+                    document_content = doc.content()
+                    if len(document_content.strip()) > 0:
+                        tokens = self.parser.parse(document_content).tokens
+                        document_entities = self.entity_linker.identify_entities_in_document(tokens)
+                    else:
+                        document_entities = []
+                    document_content = set(document_content.lower().split())
                     self._document_cache[doc.document_location] = document_content
+                    self._document_entities_cache[doc.document_location] = document_entities
 
-                document_content = self._document_cache[doc.doc.document_location]
+                document_content = self._document_cache[doc.document_location]
+                document_entities = set(entity['name']
+                                        for entity in self._document_entities_cache[doc.document_location])
                 document_snippet = set(doc.snippet.lower().split())
                 for i, answer in enumerate(answers):
                     if contains_answer(document_content, answer):
                         answers_doc_counts[i] += 1
                     if contains_answer(document_snippet, answer):
                         answers_snip_counts[i] += 1
+                    if answer in document_entities:
+                        answers_entities_counts[i] += 1
 
         return {'search_doc_count': 1.0 * sum(answers_doc_counts) / len(answers),
-                'search_snippets_count': 1.0 * sum(answers_snip_counts) / len(answers)}
+                'search_snippets_count': 1.0 * sum(answers_snip_counts) / len(answers),
+                'search_doc_entity_count': 1.0 * sum(answers_entities_counts) / len(answers)}
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format="%(asctime)s : %(levelname)s "
+                               ": %(module)s : %(message)s",
+                        level=logging.INFO)
     import sys
     feature_generator = WebSearchFeatureGenerator(sys.argv[1], sys.argv[2])
+    doc = feature_generator.question_serps[u'what character did natalie portman play in star wars?'][0]
+    content = doc.content()
     pass

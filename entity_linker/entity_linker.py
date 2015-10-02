@@ -5,8 +5,10 @@ Copyright 2015, University of Freiburg.
 
 Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 """
+import itertools
 import logging
 import re
+import operator
 import time
 from surface_index_memory import EntitySurfaceIndexMemory
 from util import normalize_entity_name, remove_number_suffix,\
@@ -265,7 +267,7 @@ class EntityLinker:
                     identified_dates.append(ie)
         return identified_dates
 
-    def identify_entities_in_tokens(self, tokens, min_surface_score=0.1):
+    def identify_entities_in_tokens(self, tokens, min_surface_score=0.1, max_token_window=-1):
         '''
         Identify instances in the tokens.
         :param tokens: A list of string tokens.
@@ -278,7 +280,7 @@ class EntityLinker:
         # First find all candidates.
         identified_entities = []
         for start in range(n_tokens):
-            for end in range(start + 1, n_tokens + 1):
+            for end in range(start + 1, n_tokens + 1 if max_token_window == -1 else start + max_token_window + 1):
                 entity_tokens = tokens[start:end]
                 if not self.is_entity_occurrence(tokens, start, end):
                     continue
@@ -313,6 +315,34 @@ class EntityLinker:
         logging.info("Entity identification took %.2f ms. Identified %s entities." % (duration,
                                                                                       len(identified_entities)))
         return identified_entities
+
+    def identify_entities_in_document(self, document_content_tokens, min_surface_score=0.5, max_token_window=3):
+        entities = self.identify_entities_in_tokens(document_content_tokens,
+                                                    min_surface_score=min_surface_score,
+                                                    max_token_window=max_token_window)
+        entities = ((entity.name, entity.surface_score, entity.score,
+                     entity.entity.id if isinstance(entity.entity, KBEntity) else entity.name) for entity in entities)
+        res = []
+        for key, values in itertools.groupby(sorted(entities,
+                                                    key=operator.itemgetter(3)),
+                                             key=operator.itemgetter(3)):
+            max_score = 0
+            max_surface_score = 0
+            name = ""
+            count = 0
+            for v in values:
+                name = v[0]
+                max_score = max(max_score, v[2])
+                max_surface_score = max(max_surface_score, v[1])
+                count += 1
+            res.append({'mid': key,
+                        'name': name,
+                        'surface_score': max_surface_score,
+                        'score': max_score,
+                        'count': count})
+        res.sort(key=operator.itemgetter('count'), reverse=True)
+        return res
+
 
     def _filter_identical_entities(self, identified_entities):
         '''

@@ -434,7 +434,7 @@ def evaluate(queries, output_file="eval_out.log"):
     completely_correct = float(len([q for q in queries if q.f1 == 1.0]))
     oracle_positions = [q.oracle_position
                         for q in queries if q.oracle_position > 0]
-    avg_oracle_position = sum(oracle_positions) / float(len(oracle_positions))
+    avg_oracle_position = sum(oracle_positions) / float(len(oracle_positions)) if len(oracle_positions) > 0 else 0.0
     oracle_top_2 = len([p for p in oracle_positions if p <= 2])
     oracle_top_3 = len([p for p in oracle_positions if p <= 3])
     oracle_top_5 = len([p for p in oracle_positions if p <= 5])
