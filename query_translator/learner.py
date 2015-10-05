@@ -73,7 +73,19 @@ def evaluate_scorer_parallel(test_queries, scorer_obj,
     return res, queries
 
 
-def evaluate_scorer(test_queries, scorer_obj):
+def print_candidates(test_queries):
+    """
+    Prints candidates
+    :param test_queries:
+    :return:
+    """
+    for test_query in test_queries:
+        print test_query.utterance
+        for rank, candidate in enumerate(test_query.eval_candidates):
+            print "\t" + str(rank) + "\t" + str(candidate.prediction) + "\t" + str(candidate.evaluation_result.f1)
+
+
+def evaluate_scorer(test_queries, scorer_obj, print_ranked_candidates=False):
     """Rank the candidates and evaluate the result.
 
     :rtype (EvaluationResult, list[EvaluationQuery])
@@ -89,6 +101,8 @@ def evaluate_scorer(test_queries, scorer_obj):
             query.eval_candidates,
             key=lambda x: x.query_candidate)
     res, queries = evaluate(test_queries)
+    if print_ranked_candidates:
+        print_candidates(test_queries)
     return res, queries
 
 
@@ -248,6 +262,17 @@ def test(scorer_name, test_dataset, cached, avg_runs=1):
         logger.info("%s: %.4f" % (k, result[k]))
 
 
+def print(scorer_name, test_dataset, cached):
+    scorer_obj = scorer_globals.scorers_dict[scorer_name]
+    # Not all rankers are MLModels
+    if isinstance(scorer_obj, MLModel):
+        scorer_obj.load_model()
+    queries = get_evaluated_queries(test_dataset,
+                                    cached,
+                                    scorer_obj.get_parameters())
+    evaluate_scorer(queries, scorer_obj, print_ranked_candidates=True)
+
+
 def cv(scorer_name, dataset, cached, n_folds=6, avg_runs=1):
     """Report the average results across different folds.
 
@@ -335,6 +360,13 @@ def main():
                            default=1,
                            help='Over how many runs to average.')
     cv_parser.set_defaults(which='cv')
+    print_parser = subparsers.add_parser('print', help='Print ranked results.')
+    print_parser.add_argument('scorer_name',
+                           help='The scorer to test.')
+    print_parser.add_argument('dataset',
+                           help='The dataset on which to compute cv scores.')
+    print_parser.set_defaults(which='print')
+
 
     args = parser.parse_args()
     # Read global config.
@@ -351,6 +383,8 @@ def main():
     elif args.which == 'cv':
         cv(args.scorer_name, args.dataset, use_cache, n_folds=args.n_folds,
            avg_runs=args.avg_runs)
+    elif args.which == 'print':
+        print(args.scorer_name, args.dataset, use_cache)
 
 
 if __name__ == '__main__':
