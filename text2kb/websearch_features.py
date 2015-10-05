@@ -1,6 +1,6 @@
 from __future__ import print_function
-from corenlp_parser.parser import CoreNLPParser
-from entity_linker.entity_linker import EntityLinker
+#from corenlp_parser.parser import CoreNLPParser
+#from entity_linker.entity_linker import EntityLinker
 from query_translator.query_candidate import QueryCandidate
 
 __author__ = 'dsavenk'
@@ -38,7 +38,7 @@ def extract_text(html_text):
 
 def contains_answer(text, answer):
     tokens = answer.lower().split()
-    return 1.0 * sum((1 if token in text else 0 for token in tokens)) / len(tokens) > 0.7
+    return 1.0 * sum((1 if token in text else 0 for token in tokens)) / len(tokens)
 
 
 class WebSearchResult:
@@ -88,8 +88,8 @@ class WebSearchFeatureGenerator:
         self._read_serp_files(serp_file, documents_file)
         self._document_cache = dict()
         self._document_entities_cache = dict()
-        self.entity_linker = EntityLinker.init_from_config()
-        self.parser = CoreNLPParser.init_from_config()
+        # self.entity_linker = EntityLinker.init_from_config()
+        # self.parser = CoreNLPParser.init_from_config()
 
     def _read_serp_files(self, serp_file, documents_file):
         # Read a file with search results
@@ -133,7 +133,11 @@ class WebSearchFeatureGenerator:
         answers = candidate.query_results
 
         if len(answers) == 0:
-            return {'search_doc_count': 0.0, 'search_snippets_count': 0.0, 'search_doc_entity_count': 0.0}
+            return {
+                'search_doc_count': 0.0,
+                'search_snippets_count': 0.0,
+#                'search_doc_entity_count': 0.0
+            }
 
         answers_doc_counts = [0, ] * len(answers)
         answers_snip_counts = [0, ] * len(answers)
@@ -144,30 +148,29 @@ class WebSearchFeatureGenerator:
             for doc in self.question_serps[question][:10]:
                 if doc.document_location not in self._document_cache:
                     document_content = doc.content()
-                    if len(document_content.strip()) > 0:
-                        tokens = self.parser.parse(document_content).tokens
-                        document_entities = self.entity_linker.identify_entities_in_document(tokens)
-                    else:
-                        document_entities = []
+                    #if len(document_content.strip()) > 0:
+                    #    tokens = self.parser.parse(document_content).tokens
+                    #    document_entities = self.entity_linker.identify_entities_in_document(tokens)
+                    #else:
+                    #    document_entities = []
                     document_content = set(document_content.lower().split())
                     self._document_cache[doc.document_location] = document_content
-                    self._document_entities_cache[doc.document_location] = document_entities
+                    #self._document_entities_cache[doc.document_location] = document_entities
 
                 document_content = self._document_cache[doc.document_location]
-                document_entities = set(entity['name']
-                                        for entity in self._document_entities_cache[doc.document_location])
+                #document_entities = set(entity['name']
+                #                        for entity in self._document_entities_cache[doc.document_location])
                 document_snippet = set(doc.snippet.lower().split())
                 for i, answer in enumerate(answers):
-                    if contains_answer(document_content, answer):
-                        answers_doc_counts[i] += 1
-                    if contains_answer(document_snippet, answer):
-                        answers_snip_counts[i] += 1
-                    if answer in document_entities:
-                        answers_entities_counts[i] += 1
+                    answers_doc_counts[i] += contains_answer(document_content, answer)
+                    answers_snip_counts[i] += contains_answer(document_snippet, answer)
+                    #if answer in document_entities:
+                    #    answers_entities_counts[i] += 1
 
         return {'search_doc_count': 1.0 * sum(answers_doc_counts) / len(answers),
                 'search_snippets_count': 1.0 * sum(answers_snip_counts) / len(answers),
-                'search_doc_entity_count': 1.0 * sum(answers_entities_counts) / len(answers)}
+                #'search_doc_entity_count': 1.0 * sum(answers_entities_counts) / len(answers)
+                }
 
 
 if __name__ == "__main__":

@@ -262,7 +262,7 @@ def test(scorer_name, test_dataset, cached, avg_runs=1):
         logger.info("%s: %.4f" % (k, result[k]))
 
 
-def print(scorer_name, test_dataset, cached):
+def eval_print(scorer_name, test_dataset, cached):
     scorer_obj = scorer_globals.scorers_dict[scorer_name]
     # Not all rankers are MLModels
     if isinstance(scorer_obj, MLModel):
@@ -384,7 +384,7 @@ def main():
         cv(args.scorer_name, args.dataset, use_cache, n_folds=args.n_folds,
            avg_runs=args.avg_runs)
     elif args.which == 'print':
-        print(args.scorer_name, args.dataset, use_cache)
+        eval_print(args.scorer_name, args.dataset, use_cache)
 
 
 if __name__ == '__main__':

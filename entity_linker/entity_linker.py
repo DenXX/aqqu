@@ -267,7 +267,7 @@ class EntityLinker:
                     identified_dates.append(ie)
         return identified_dates
 
-    def identify_entities_in_tokens(self, tokens, min_surface_score=0.1, max_token_window=-1):
+    def identify_entities_in_tokens(self, tokens, min_surface_score=0.1, max_token_window=-1, find_dates=True):
         '''
         Identify instances in the tokens.
         :param tokens: A list of string tokens.
@@ -303,7 +303,8 @@ class EntityLinker:
                                           perfect_match)
                     # self.boost_entity_score(ie)
                     identified_entities.append(ie)
-        identified_entities.extend(self.identify_dates(tokens))
+        if find_dates:
+            identified_entities.extend(self.identify_dates(tokens))
         duration = (time.time() - start_time) * 1000
         identified_entities = self._filter_identical_entities(identified_entities)
         identified_entities = EntityLinker.prune_entities(identified_entities,
@@ -319,7 +320,8 @@ class EntityLinker:
     def identify_entities_in_document(self, document_content_tokens, min_surface_score=0.5, max_token_window=3):
         entities = self.identify_entities_in_tokens(document_content_tokens,
                                                     min_surface_score=min_surface_score,
-                                                    max_token_window=max_token_window)
+                                                    max_token_window=max_token_window,
+                                                    find_dates=False)
         entities = ((entity.name, entity.surface_score, entity.score,
                      entity.entity.id if isinstance(entity.entity, KBEntity) else entity.name) for entity in entities)
         res = []
