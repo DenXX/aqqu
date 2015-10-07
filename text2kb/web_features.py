@@ -55,7 +55,7 @@ def _read_document_content(document_content_file):
         while True:
             try:
                 url, content = pickle.load(content_input)
-                tokens = ((token.token.lower(), token.lemma.lower()) for token in content)
+                tokens = ((token.token.lower(), token.lemma.lower()) for token in content.tokens)
                 documents_content[url] = tokens
             except (EOFError, pickle.UnpicklingError):
                 break
@@ -74,8 +74,7 @@ def entity_names_equal(entity1, entity2):
     return entity1.lower() == entity2.lower()
 
 
-def answer_contains(answer, doc_tokens_set):
-    answer_tokens = [token.lower() for token in answer.split()]
+def answer_contains(answer_tokens, doc_tokens_set):
     return sum(1.0 for answer_token in answer_tokens if answer_token in doc_tokens_set) / len(answer_tokens)
 
 
@@ -168,6 +167,10 @@ class WebFeatureGenerator:
         answer_occurances_entity = [0, ] * len(answers)
         answer_doc_occurances_entity = [0, ] * len(answers)
         answer_doc_occurances_text = [0, ] * len(answers)
+        answer_neighbourhood = []
+        for i in xrange(len(answers)):
+            answer_neighbourhood.append(set())
+
         for rank, doc in enumerate(question_search_results[question][:TOPN]):
             doc_content = doc.parsed_content()
             doc_entities = doc.mentioned_entities()
@@ -184,9 +187,19 @@ class WebFeatureGenerator:
 
             if doc_content:
                 doc_tokens = set(token[0] for token in doc_content)
+                # token_to_pos = {(token, pos) for pos, token in enumerate(doc_content)}
                 for i, answer in enumerate(answers):
-                    if answer_contains(answer, doc_tokens):
+                    answer_tokens = [token.lower() for token in answer.split()]
+                    if answer_contains(answer_tokens, doc_tokens):
                         answer_doc_occurances_text[i] += 1
+
+                    # answer_positions = set(
+                    #     token_to_pos[answer_token] for answer_token in answer_tokens if answer_token in token_to_pos)
+                    # for pos in answer_positions:
+                    #     for around in xrange(max(0, pos - 3), min(len(doc_content), pos + 4)):
+                    #         answer_neighbourhood[i] += doc_content[around][0]
+
+
 
         return {
             'web_results:answer_entity_occurances': 1.0 * sum(answer_occurances_entity) / len(answers),
