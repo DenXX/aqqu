@@ -93,8 +93,8 @@ class FeatureExtractor(object):
         self.text_feature_generator = None
         self.generate_text_features = text_features
         if text_features:
-            from text2kb.websearch_features import WebSearchFeatureGenerator
-            self.text_feature_generator = WebSearchFeatureGenerator.init_from_config()
+            from text2kb.web_features import WebFeatureGenerator
+            self.text_feature_generator = WebFeatureGenerator.init_from_config()
 
     def extract_features(self, candidate):
         """Extract features from the query candidate.

@@ -164,7 +164,9 @@ class AccuModel(MLModel, Ranker):
                  train_dataset,
                  top_ngram_percentile=5,
                  rel_regularization_C=None,
-                 extract_text_features=False,
+                 extract_text_features_pruning=False,
+                 extract_text_features_ranking=False,
+                 use_pruning=True,
                  **kwargs):
         MLModel.__init__(self, name, train_dataset)
         Ranker.__init__(self, name, **kwargs)
@@ -181,15 +183,17 @@ class AccuModel(MLModel, Ranker):
         self.kwargs = kwargs
         self.top_ngram_percentile = top_ngram_percentile
         self.rel_regularization_C = rel_regularization_C
+        self.use_pruning = use_pruning
         # Only extract ngram features.
         self.feature_extractor = FeatureExtractor(True,
                                                   False,
                                                   None,
-                                                  text_features=extract_text_features)
+                                                  text_features=extract_text_features_ranking)
         self.prune_feature_extractor = FeatureExtractor(True,
                                                         False,
                                                         None,
-                                                        entity_features=True)
+                                                        entity_features=True,
+                                                        text_features=extract_text_features_pruning)
 
     def load_model(self):
         model_file = self.get_model_filename()
@@ -424,6 +428,8 @@ class AccuModel(MLModel, Ranker):
         return ranked_candidates
 
     def prune_candidates(self, query_candidates, key):
+        if not self.use_pruning:
+            return query_candidates
         remaining = []
         if len(query_candidates) > 0:
             remaining = self.pruner.prune_candidates(query_candidates, key)

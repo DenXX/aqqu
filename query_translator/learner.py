@@ -80,9 +80,10 @@ def print_candidates(test_queries):
     :return:
     """
     for test_query in test_queries:
-        print test_query.utterance
-        for rank, candidate in enumerate(test_query.eval_candidates):
-            print "\t" + str(rank) + "\t" + str(candidate.prediction) + "\t" + str(candidate.evaluation_result.f1)
+        if test_query.oracle_f1 == 0:
+            print test_query.utterance, test_query.oracle_position
+            for rank, candidate in enumerate(test_query.eval_candidates):
+                print "\t" + str(rank) + "\t" + str(candidate.prediction) + "\t" + str(candidate.evaluation_result.f1)
 
 
 def evaluate_scorer(test_queries, scorer_obj, print_ranked_candidates=False):
@@ -385,6 +386,7 @@ def main():
            avg_runs=args.avg_runs)
     elif args.which == 'print':
         eval_print(args.scorer_name, args.dataset, use_cache)
+
 
 
 if __name__ == '__main__':

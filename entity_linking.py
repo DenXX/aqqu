@@ -22,6 +22,8 @@ def find_document_entities(document, parser, entity_linker):
     content = document.content()
     if len(content.strip()) > 0:
         tokens = parser.parse(content).tokens[:1000]
+        # Entity linker returns a dictionary from url to a list of entities. Each
+        # entity is a dictionary with keys: 'mid', 'name', 'surface_score', 'score', 'count'
         return entity_linker.identify_entities_in_document(tokens, min_surface_score=0.5)
     return []
 
@@ -42,10 +44,26 @@ def main_parse():
             print "Query #", index, datetime.now()
             index += 1
 
-def test_load():
-    data = []
-    with open(sys.argv[1], 'r') as input:
-        data.append(pickle.load(input))
+
+def main_entities():
+    globals.read_configuration('config.cfg')
+    feature_generator = WebSearchFeatureGenerator.init_from_config()
+    import operator
+    while True:
+        print "Please enter a question:"
+        question = sys.stdin.readline().strip()
+        if question in feature_generator.question_serps:
+            docs = feature_generator.question_serps[question][:10]
+            entities = {}
+            for doc in docs:
+                for entity in feature_generator._document_entities[doc.url]:
+                    e = (entity['mid'], entity['name'])
+                    if e not in entities:
+                        entities[e] = 0
+                    entities[e] += entity['count']
+            top_entities = entities.items()
+            top_entities.sort(key=operator.itemgetter(1), reverse=True)
+            print top_entities[:50]
 
 
 def main():
@@ -63,4 +81,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main_parse()
+    main_entities()
