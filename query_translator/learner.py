@@ -249,9 +249,8 @@ def test(scorer_name, test_dataset, cached, avg_runs=1):
     for _ in range(avg_runs):
         logger.info("Run %s of %s" % (n_runs, avg_runs))
         n_runs += 1
-        res, test_queries = evaluate_scorer_parallel(queries,
-                                                     scorer_obj,
-                                                     num_processes=3)
+        res, test_queries = evaluate_scorer(queries,
+                                                     scorer_obj)
         logger.info(res)
         for k, v in res._asdict().iteritems():
             result[k] += v
@@ -347,6 +346,16 @@ def main():
                              default=1,
                              help='Over how many runs to average.')
     test_parser.set_defaults(which='test')
+    traintest_parser = subparsers.add_parser('traintest', help='Train and test a scorer.')
+    traintest_parser.add_argument('scorer_name',
+                             help='The scorer to test.')
+    traintest_parser.add_argument('test_dataset',
+                             help='The dataset on which to test the scorer.')
+    traintest_parser.add_argument('--avg_runs',
+                             type=int,
+                             default=1,
+                             help='Over how many runs to average.')
+    traintest_parser.set_defaults(which='traintest')
     cv_parser = subparsers.add_parser('cv', help='Cross-validate a scorer.')
     cv_parser.add_argument('scorer_name',
                            help='The scorer to test.')
@@ -379,6 +388,10 @@ def main():
     if args.which == 'train':
         train(args.scorer_name, use_cache)
     elif args.which == 'test':
+        test(args.scorer_name, args.test_dataset, use_cache,
+             avg_runs=args.avg_runs)
+    elif args.which == 'traintest':
+        train(args.scorer_name, use_cache)
         test(args.scorer_name, args.test_dataset, use_cache,
              avg_runs=args.avg_runs)
     elif args.which == 'cv':

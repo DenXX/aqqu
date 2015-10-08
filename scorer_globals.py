@@ -56,7 +56,9 @@ def init():
                                      "webquestions_small_train",
                                      top_ngram_percentile=5,
                                      rel_regularization_C=1.0,
-                                     extract_text_features=True),
+                                     extract_text_features_ranking=True,
+                                     extract_text_features_pruning=False,
+                                     use_pruning=True),
                    ranker.SimpleScoreRanker('SimpleRanker'),
                    ranker.SimpleScoreRanker('SimpleRanker_entity_oracle',
                                              entity_oracle_file=free917_entities),
@@ -117,5 +119,11 @@ def init():
          ('webquestions_small_test',
           'evaluation-data/'
           'webquestions.test_small.json'),
+         ('webquestions_split_train',
+          'evaluation-data/'
+          'webquestions.split.train.json'),
+         ('webquestions_split_dev',
+          'evaluation-data/'
+          'webquestions.split.dev.json'),
          ]
     )

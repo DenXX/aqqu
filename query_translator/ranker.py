@@ -9,6 +9,7 @@ Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 import math
 import time
 import logging
+import operator
 import translator
 import random
 import globals
@@ -35,6 +36,7 @@ from sklearn.pipeline import FeatureUnion
 from sklearn.cross_validation import KFold
 
 RANDOM_SHUFFLE = 0.3
+N_JOBS = 1
 
 logger = logging.getLogger(__name__)
 
@@ -284,14 +286,13 @@ class AccuModel(MLModel, Ranker):
         logger.info("#of labeled examples: %s" % len(features))
         logger.info("#labels non-zero: %s" % sum(labels))
         label_encoder = LabelEncoder()
-        logger.info(features[-1])
         labels = label_encoder.fit_transform(labels)
         vec = DictVectorizer(sparse=False)
         X = vec.fit_transform(features)
         X, labels = utils.shuffle(X, labels, random_state=999)
         decision_tree = RandomForestClassifier(class_weight='auto',
                                                random_state=999,
-                                               n_jobs=6,
+                                               n_jobs=N_JOBS,
                                                n_estimators=90)
         logger.info("Training random forest...")
         decision_tree.fit(X, labels)
@@ -300,6 +301,15 @@ class AccuModel(MLModel, Ranker):
         self.dict_vec = vec
         self.label_encoder = label_encoder
         self.correct_index = label_encoder.transform([1])[0]
+
+    def print_model(self):
+        try:
+            logger.info("Ranking model feature importances: ")
+            feature_importances = sorted(zip(self.dict_vec.get_feature_names(), self.model.feature_importances_),
+                                         key=operator.itemgetter(1), reverse=True)
+            logger.info(feature_importances)
+        except:
+            logger.warning("Cannot print ranking model feature importances")
 
     def store_model(self):
         logger.info("Writing model to %s." % self.get_model_filename())
@@ -495,7 +505,7 @@ class CandidatePruner(MLModel):
                                          class_weight=class_weights,
                                          cv=6,
                                          solver='lbfgs',
-                                         n_jobs=6,
+                                         n_jobs=N_JOBS,
                                          # max_iter=40,
                                          verbose=True)
         logreg_cv.fit(X, labels)
@@ -1004,7 +1014,9 @@ def construct_pair_examples(queries, f_extractor):
     logger.info("Extracting features from candidates.")
     labels = []
     features = []
-    for query in queries:
+    for query_index, query in enumerate(queries):
+        if query_index % 100 == 0:
+            logger.info("Processed " + str(query_index) + " queries...")
         oracle_position = query.oracle_position
         # Only create pairs for which we "know" a correct solution
         # The oracle answer is the one with highest F1 but not necessarily

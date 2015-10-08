@@ -3,6 +3,7 @@ Copyright 2015, University of Freiburg.
 
 Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 """
+import codecs
 from ConfigParser import SafeConfigParser
 from itertools import tee, izip
 import logging
@@ -18,6 +19,9 @@ sparql_backend = None
 # When a configuration is read, store it here to make it accessible.
 config = None
 
+# A set of stopwords.
+_stopwords = None
+
 # TODO(elmar): move this somewhere else.
 def get_sparql_backend(config_options):
     global sparql_backend
@@ -25,6 +29,21 @@ def get_sparql_backend(config_options):
     if not sparql_backend:
         sparql_backend = SPARQLHTTPBackend.init_from_config(config_options)
     return sparql_backend
+
+
+def get_stopwords():
+    """
+    :return: Returns a set of stopwords.
+    """
+    global _stopwords
+    if _stopwords:
+        return _stopwords
+    _stopwords = set()
+    stopwords_file = config.get('WebSearchFeatures', 'stopwords-file')
+    with codecs.open(stopwords_file, 'r', 'utf-8') as stopwords_file_input:
+        for line in stopwords_file_input:
+            _stopwords.add(line.strip())
+    return _stopwords
 
 
 def get_prefixed_qualified_mid(mid, prefix):

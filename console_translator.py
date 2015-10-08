@@ -46,6 +46,15 @@ def main():
         results = translator.translate_and_execute_query(query)
         logger.info("Done translating query: %s" % query)
         logger.info("#candidates: %s" % len(results))
+        logger.info("------------------- Candidate features ------------------")
+        for rank, result in enumerate(results[:10]):
+            logger.info("RANK " + str(rank))
+            logger.info(result.query_candidate.relations)
+            logger.info("%s (%s)" % (r[1], r[0]) if len(r) > 1 else "%s" % r[0]
+                        for r in results[0].query_result_rows)
+            if result.query_candidate.features:
+                logger.info("Features: " + str(result.query_candidate.features))
+        logger.info("---------------------------------------------------------")
         if len(results) > 0:
             best_candidate = results[0].query_candidate
             sparql_query = best_candidate.to_sparql_query()

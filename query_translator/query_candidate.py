@@ -302,6 +302,8 @@ class QueryCandidate:
         # An indicator whether the candidate matches the answer type
         self.matches_answer_type = None
         self.query_results = None
+        self.features = None
+        self.feature_extractor = None
 
     def get_relation_names(self):
         return sorted([r.name for r in self.relations])
@@ -325,6 +327,8 @@ class QueryCandidate:
         d = dict(self.__dict__)
         del d['sparql_backend']
         del d['extension_history']
+        del d['features']
+        del d['feture_extractor']
         return d
 
     def __setstate__(self, d):
@@ -336,6 +340,12 @@ class QueryCandidate:
         self.__dict__.update(d)
         self.sparql_backend = None
         self.extension_history = []
+        self.features = None
+        self.feature_extractor = None
+
+    def clear_features(self):
+        self.features = None
+        self.feature_extractor = None
 
     def get_result_count(self, use_cached_value=True):
         """

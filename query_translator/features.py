@@ -103,6 +103,14 @@ class FeatureExtractor(object):
         :param candidate:
         :return:
         """
+
+        # Return the cached features if possible.
+        if candidate.features:
+            if candidate.feature_extractor == self:
+                return candidate.features
+            else:
+                candidate.clear_features()
+
         # The number of literal entities.
         n_literal_entities = 0
         # The sum of surface_score * mention_length over all entity mentions.
@@ -246,6 +254,10 @@ class FeatureExtractor(object):
         # TODO(denxx): I should probably check that the answers list isn't too long?..
         if self.generate_text_features:
             features.update(self.text_feature_generator.generate_features(candidate))
+
+        # Cache features and store which feature extractor was used to produce them.
+        candidate.features = features
+        candidate.feature_extractor = self
         return features
 
     def extract_ngram_features(self, candidate):
