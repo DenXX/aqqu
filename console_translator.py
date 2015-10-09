@@ -50,8 +50,7 @@ def main():
         for rank, result in enumerate(results[:10]):
             logger.info("RANK " + str(rank))
             logger.info(result.query_candidate.relations)
-            logger.info(["%s (%s)" % (r[1], r[0]) if len(r) > 1 else "%s" % r[0]
-                        for r in results[0].query_result_rows])
+            logger.info(result.query_candidate.get_results_text())
             if result.query_candidate.features:
                 logger.info("Features: " + str(result.query_candidate.features))
         logger.info("---------------------------------------------------------")
