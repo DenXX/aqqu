@@ -927,6 +927,9 @@ class QueryCandidateRelation(QueryCandidateNode):
     def get_prefixed_sparql_name(self, prefix):
         return '%s:%s' % (prefix, self.name)
 
+    def __str__(self):
+        return self.as_string()
+
 
 def test():
     query = Query("some test query")
