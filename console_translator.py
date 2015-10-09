@@ -39,34 +39,37 @@ def main():
     translator = QueryTranslator.init_from_config()
     translator.set_scorer(ranker)
     while True:
-        sys.stdout.write("enter question> ")
-        sys.stdout.flush()
-        query = sys.stdin.readline().strip()
-        logger.info("Translating query: %s" % query)
-        results = translator.translate_and_execute_query(query)
-        logger.info("Done translating query: %s" % query)
-        logger.info("#candidates: %s" % len(results))
-        logger.info("------------------- Candidate features ------------------")
-        for rank, result in enumerate(results[:10]):
-            logger.info("RANK " + str(rank))
-            logger.info(result.query_candidate.relations)
-            logger.info(result.query_candidate.get_results_text())
-            if result.query_candidate.features:
-                logger.info("Features: " + str(result.query_candidate.features))
-        logger.info("---------------------------------------------------------")
-        if len(results) > 0:
-            best_candidate = results[0].query_candidate
-            sparql_query = best_candidate.to_sparql_query()
-            result_rows = results[0].query_result_rows
-            result = []
-            # Usually we get a name + mid.
-            for r in result_rows:
-                if len(r) > 1:
-                    result.append("%s (%s)" % (r[1], r[0]))
-                else:
-                    result.append("%s" % r[0])
-            logger.info("SPARQL query: %s" % sparql_query)
-            logger.info("Result: %s " % " ".join(result))
+        try:
+            sys.stdout.write("enter question> ")
+            sys.stdout.flush()
+            query = sys.stdin.readline().strip()
+            logger.info("Translating query: %s" % query)
+            results = translator.translate_and_execute_query(query)
+            logger.info("Done translating query: %s" % query)
+            logger.info("#candidates: %s" % len(results))
+            logger.info("------------------- Candidate features ------------------")
+            for rank, result in enumerate(results[:10]):
+                logger.info("RANK " + str(rank))
+                logger.info(result.query_candidate.relations)
+                logger.info(result.query_candidate.get_results_text())
+                if result.query_candidate.features:
+                    logger.info("Features: " + str(result.query_candidate.features))
+            logger.info("---------------------------------------------------------")
+            if len(results) > 0:
+                best_candidate = results[0].query_candidate
+                sparql_query = best_candidate.to_sparql_query()
+                result_rows = results[0].query_result_rows
+                result = []
+                # Usually we get a name + mid.
+                for r in result_rows:
+                    if len(r) > 1:
+                        result.append("%s (%s)" % (r[1], r[0]))
+                    else:
+                        result.append("%s" % r[0])
+                logger.info("SPARQL query: %s" % sparql_query)
+                logger.info("Result: %s " % " ".join(result))
+        except Exception as e:
+            logger.error(e.message)
 
 
 if __name__ == "__main__":

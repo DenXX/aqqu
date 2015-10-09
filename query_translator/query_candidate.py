@@ -253,6 +253,8 @@ class EntityMatch:
     def as_string(self):
         return self.entity.as_string()
 
+    def __repr__(self):
+        return self.as_string()
 
 class QueryCandidate:
     """
@@ -387,7 +389,7 @@ class QueryCandidate:
         return self.sparql_backend.query_json(sparql_query)
 
     def get_results_text(self):
-        if self.query_results:
+        if self.query_results is not None:
             return self.query_results
         res = self.get_result(include_name=True)
         self.query_results = []

@@ -131,9 +131,9 @@ class IdentifiedEntity():
         self.perfect_match = perfect_match
 
     def as_string(self):
-        t = ','.join(["%s" % t.token
+        t = u','.join([u"%s" % t.token
                       for t in self.tokens])
-        return "%s: tokens:%s prob:%.3f score:%s perfect_match:%s" % \
+        return u"%s: tokens:%s prob:%.3f score:%s perfect_match:%s" % \
                (self.name, t,
                 self.surface_score,
                 self.score,
@@ -148,6 +148,12 @@ class IdentifiedEntity():
 
     def prefixed_sparql_name(self, prefix):
         return self.entity.prefixed_sparql_name(prefix)
+
+    def __unicode__(self):
+        return self.as_string()
+
+    def __repr__(self):
+        return unicode(self).encode('utf-8')
 
 
 def get_value_for_year(year):
@@ -275,7 +281,7 @@ class EntityLinker:
                  at token index i (inclusive) to j (exclusive)
         '''
         n_tokens = len(tokens)
-        logger.info("Starting entity identification.")
+        logger.debug("Starting entity identification.")
         start_time = time.time()
         # First find all candidates.
         identified_entities = []
@@ -313,7 +319,7 @@ class EntityLinker:
         identified_entities = sorted(identified_entities, key=lambda x: (len(x.tokens),
                                                                          x.surface_score),
                                      reverse=True)
-        logging.info("Entity identification took %.2f ms. Identified %s entities." % (duration,
+        logging.debug("Entity identification took %.2f ms. Identified %s entities." % (duration,
                                                                                       len(identified_entities)))
         return identified_entities
 

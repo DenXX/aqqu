@@ -80,5 +80,40 @@ def main():
         pickle.dump(doc_entities, out)
 
 
+def main_entity_link_text():
+    globals.read_configuration('config.cfg')
+    entity_linker = globals.get_entity_linker()
+    parser = globals.get_parser()
+    from text2kb.web_features import _read_serp_files
+    serp_files = globals.config.get('WebSearchFeatures', 'serp-files').split(',')
+    documents_files = globals.config.get('WebSearchFeatures', 'documents-files').split(',')
+    question_search_results = _read_serp_files(serp_files, documents_files)
+    import operator
+    while True:
+        print "Please enter some text: "
+        text = sys.stdin.readline().strip().decode('utf-8')
+        tokens = parser.parse(text).tokens
+        print entity_linker.identify_entities_in_document(tokens, max_token_window=5)
+        entities = {}
+        tokens = {}
+        if text in question_search_results:
+            for doc in question_search_results[text][:10]:
+                print doc
+                title = doc.title
+                snippet = doc.snippet
+                snippet_tokens = parser.parse(title + "\n" + snippet).tokens
+                for token in snippet_tokens:
+                    if token.lemma not in tokens:
+                        tokens[token.lemma] = 0
+                    tokens[token.lemma] += 1
+                for entity in entity_linker.identify_entities_in_document(snippet_tokens):
+                    if entity['mid'] not in entities:
+                        entities[entity['mid']] = entity
+                    else:
+                        entities[entity['mid']]['count'] += entity['count']
+        print sorted(entities.values(), key=operator.itemgetter('count'), reverse=True)[:50]
+        print sorted(tokens.items(), key=operator.itemgetter(1), reverse=True)[:50]
+
+
 if __name__ == "__main__":
-    main_entities()
+    main_entity_link_text()

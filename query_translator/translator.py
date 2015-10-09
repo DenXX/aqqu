@@ -74,8 +74,8 @@ class QueryTranslator(object):
         config_params = globals.config
         sparql_backend = globals.get_sparql_backend(config_params)
         query_extender = QueryCandidateExtender.init_from_config()
-        entity_linker = EntityLinker.init_from_config()
-        parser = CoreNLPParser.init_from_config()
+        entity_linker = globals.get_entity_linker()
+        parser = globals.get_parser()
         scorer_obj = ranker.SimpleScoreRanker('DefaultScorer')
         return QueryTranslator(sparql_backend, query_extender,
                                entity_linker, parser, scorer_obj)

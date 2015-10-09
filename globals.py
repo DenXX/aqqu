@@ -22,6 +22,9 @@ config = None
 # A set of stopwords.
 _stopwords = None
 
+_entity_linker = None
+_parser = None
+
 # TODO(elmar): move this somewhere else.
 def get_sparql_backend(config_options):
     global sparql_backend
@@ -36,7 +39,7 @@ def get_stopwords():
     :return: Returns a set of stopwords.
     """
     global _stopwords
-    if _stopwords:
+    if _stopwords is not None:
         return _stopwords
     _stopwords = set()
     stopwords_file = config.get('WebSearchFeatures', 'stopwords-file')
@@ -44,6 +47,24 @@ def get_stopwords():
         for line in stopwords_file_input:
             _stopwords.add(line.strip())
     return _stopwords
+
+
+def get_entity_linker():
+    global _entity_linker
+    if _entity_linker is not None:
+        return _entity_linker
+    from entity_linker.entity_linker import EntityLinker
+    _entity_linker = EntityLinker.init_from_config()
+    return _entity_linker
+
+
+def get_parser():
+    global _parser
+    if _parser is not None:
+        return _parser
+    from corenlp_parser.parser import CoreNLPParser
+    _parser = CoreNLPParser.init_from_config()
+    return _parser
 
 
 def get_prefixed_qualified_mid(mid, prefix):
