@@ -927,8 +927,11 @@ class QueryCandidateRelation(QueryCandidateNode):
     def get_prefixed_sparql_name(self, prefix):
         return '%s:%s' % (prefix, self.name)
 
-    def __str__(self):
+    def __unicode__(self):
         return self.as_string()
+
+    def __repr__(self):
+        return unicode(self)
 
 
 def test():
