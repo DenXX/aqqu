@@ -383,6 +383,8 @@ class QueryCandidate:
         for this query candidate.
         :return:
         """
+        if self.query_results:
+            return self.query_results
         sparql_query = self.to_sparql_query(include_name=include_name)
         self.query_results = self.sparql_backend.query_json(sparql_query)
         return self.query_results
