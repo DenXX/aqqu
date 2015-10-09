@@ -383,10 +383,19 @@ class QueryCandidate:
         for this query candidate.
         :return:
         """
+        sparql_query = self.to_sparql_query(include_name=include_name)
+        return self.sparql_backend.query_json(sparql_query)
+
+    def get_results_text(self):
         if self.query_results:
             return self.query_results
-        sparql_query = self.to_sparql_query(include_name=include_name)
-        self.query_results = self.sparql_backend.query_json(sparql_query)
+        res = self.get_result(include_name=True)
+        self.query_results = []
+        for r in res:
+            if len(r) > 1 and r[1]:
+                self.query_results.append(r[1])
+            else:
+                self.query_results.append(r[0])
         return self.query_results
 
     def get_relation_suggestions(self):

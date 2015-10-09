@@ -208,7 +208,7 @@ class WebFeatureGenerator:
         :param candidate: Candidate answer to generate features for
         :return: A dictionary from feature name to feature value.
         """
-        answers = candidate.get_results(include_name=True)
+        answers = candidate.get_results_text()
 
         # Ignoring empty and extra long answers, these are unlikely to be correct anyway.
         if not answers or len(answers) == 0 or len(answers) > 10:
