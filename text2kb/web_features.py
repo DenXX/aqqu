@@ -69,7 +69,6 @@ def _read_document_content(document_content_file):
             index += 1
             if index % 1000 == 0:
                 logger.info("Read " + str(index) + " documents...")
-                break
     logger.info("Reading documents content done!")
 
 
