@@ -211,7 +211,7 @@ class WebFeatureGenerator:
         answers = candidate.query_results
 
         # Ignoring empty and extra long answers, these are unlikely to be correct anyway.
-        if len(answers) == 0 or len(answers) > 10:
+        if not answer or len(answers) == 0 or len(answers) > 10:
             return dict()
 
         question = candidate.query.original_query
