@@ -3,6 +3,7 @@ import justext
 import cPickle as pickle
 import json
 import logging
+from math import log
 import globals
 import os
 from query_translator.features import get_query_text_tokens
@@ -12,6 +13,7 @@ __author__ = 'dsavenk'
 
 TOPN = 10
 WINDOW_SIZE = 3
+SLIDING_WINDOW_SIZE = 20
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +72,7 @@ def _read_document_content(document_content_file):
             if index % 1000 == 0:
                 logger.info("Read " + str(index) + " documents...")
     logger.info("Reading documents content done!")
+    return documents_content
 
 
 def _read_entities(document_entities_file):
@@ -110,6 +113,69 @@ def compute_tokenset_similarity(question_tokenset, answer_tokenset):
     return 1.0 * res / (sqrt(len(question_tokenset))) / sqrt(sum)
 
 
+def compute_sliding_window_score(question_tokens, answer_tokens, doc_content):
+    begin_index = 0
+    end_index = min(len(doc_content), SLIDING_WINDOW_SIZE)
+
+    question_lemmas = set(question_tokens)
+    answer_tokens = set(answer_tokens)
+    passage_tokens = dict()
+    passage_lemma = dict()
+    for i in xrange(end_index):
+        token, lemma = doc_content[i]
+        if token not in passage_tokens:
+            passage_tokens[token] = 0
+        if lemma not in passage_lemma:
+            passage_lemma[lemma] = 0
+        passage_lemma[lemma] += 1
+        passage_tokens[token] += 1
+    score = compute_single_sliding_window_score(answer_tokens, passage_lemma, passage_tokens, question_lemmas)
+
+    while end_index < len(doc_content):
+        to_remove_token, to_remove_lemma = doc_content[begin_index]
+        passage_tokens[to_remove_token] -= 1
+        if passage_tokens[to_remove_token] == 0:
+            del passage_tokens[to_remove_token]
+        passage_lemma[to_remove_lemma] -= 1
+        if passage_lemma[to_remove_lemma] == 0:
+            del passage_lemma[to_remove_lemma]
+        new_token, new_lemma = doc_content[end_index]
+        if new_token not in passage_tokens:
+            passage_tokens[new_token] = 0
+        if new_lemma not in passage_lemma:
+            passage_lemma[new_lemma] = 0
+        passage_lemma[new_lemma] += 1
+        passage_tokens[new_token] += 1
+        # TODO(denxx): This is too slow, we can update the score without recomputing it.
+        score = max(score, compute_single_sliding_window_score(answer_tokens,
+                                                               passage_lemma,
+                                                               passage_tokens,
+                                                               question_lemmas))
+        begin_index += 1
+        end_index += 1
+
+    return score
+
+
+def compute_single_sliding_window_score(answer_tokens, passage_lemma, passage_tokens, question_lemmas):
+    score = 0.0
+    for token, count in passage_tokens.iteritems():
+        if token in answer_tokens:
+            score += log(1 + 1.0 / count)
+    for lemma, count in passage_lemma.iteritems():
+        if lemma in question_lemmas:
+            score += log(1 + 1.0 / count)
+    return score
+
+
+def compute_min_distance_question_answer(question_tokens_positions, answer_tokens_positions, document_length):
+    diff = 0
+    for question_pos in question_tokens_positions:
+        for answer_pos in answer_tokens_positions:
+            diff = min(diff, question_pos - answer_pos)
+    return 1.0 / document_length * diff if diff > 0 else 1.0
+
+
 class WebSearchResult:
     """
     Represents a search results. It lazily reads document content
@@ -123,6 +189,7 @@ class WebSearchResult:
         self.document_location = document_location
         self.content_tokens = None
         self.token_to_pos = None
+        self.lemma_to_pos = None
         self.snippet_tokens = None
         self.snippet_entities = None
 
@@ -160,16 +227,20 @@ class WebSearchResult:
         :return: Returns a map from token to its position in the document. The map
         is computed the first time the method is called and then the result is cached.
         """
-        if self.token_to_pos is not None:
-            return self.token_to_pos
-        self.token_to_pos = dict()
-        if self.parsed_content() is not None:
-            for pos, token in enumerate(self.parsed_content()):
-                token = token[0].lower()
-                if token not in self.token_to_pos:
-                    self.token_to_pos[token] = []
-                self.token_to_pos[token].append(pos)
-        return self.token_to_pos
+        if self.token_to_pos is None:
+            self.token_to_pos = dict()
+            self.lemma_to_pos = dict()
+            if self.parsed_content() is not None:
+                for pos, token in enumerate(self.parsed_content()):
+                    lemma = token[1].lower()
+                    token = token[0].lower()
+                    if token not in self.token_to_pos:
+                        self.token_to_pos[token] = []
+                    if lemma not in self.lemma_to_pos:
+                        self.lemma_to_pos[lemma] = []
+                    self.token_to_pos[token].append(pos)
+                    self.lemma_to_pos[lemma].append(pos)
+        return self.token_to_pos, self.lemma_to_pos
 
     def get_snippet_tokens(self):
         if self.snippet_tokens is None:
@@ -272,6 +343,8 @@ class WebFeatureGenerator:
         answer_doc_occurances_text = [0, ] * len(answers)
         answer_context_question_similarity = [0.0, ] * len(answers)
         question_entities_in_snippets = 0
+        sliding_window_score = [0.0, ] * len(answers)
+        min_distance_question_answer_token = [0.0, ] * len(answers)
         answer_neighbourhood = []
         for i in xrange(len(answers)):
             answer_neighbourhood.append(set())
@@ -302,7 +375,7 @@ class WebFeatureGenerator:
                 if seen:
                     answer_doc_occurances_entity[i] += 1
 
-            token_to_pos = doc.get_token_to_positions_map()
+            token_to_pos, lemma_to_pos = doc.get_token_to_positions_map()
             for i, answer_tokens in enumerate(answers_tokens):
                 if answer_contains(answer_tokens, snippets_tokens) > 0.7:
                     answer_occurances_snippet_text[i] += 1
@@ -311,11 +384,21 @@ class WebFeatureGenerator:
                     if answer_contains(answer_tokens, doc_tokens) > 0.7:
                         answer_doc_occurances_text[i] += 1
 
+                    sliding_window_score[i] += compute_sliding_window_score(question_tokens, answer_tokens, doc_content)
+
                     # Get a set of positions of answer tokens in the target document.
                     answer_tokens_positions = set(pos
                                                   for answer_token in answer_tokens
                                                   if answer_token in token_to_pos
                                                   for pos in token_to_pos[answer_token])
+                    question_tokens_positions = set(pos for question_lemma in question_tokens
+                                                    if question_lemma in lemma_to_pos
+                                                    for pos in lemma_to_pos[question_lemma]
+                                                    if pos not in answer_tokens_positions)
+
+                    min_distance_question_answer_token[i] += compute_min_distance_question_answer(
+                        question_tokens_positions, answer_tokens_positions, len(doc_content))
+
 
                     # Get a set of actual tokens in the neighbourhood of answer tokens.
                     answer_tokens_neighborhood = Counter([doc_content[neighbor][1]  # [1] is lemma
@@ -331,6 +414,8 @@ class WebFeatureGenerator:
             'web_results:answer_entity_occurances': 1.0 * sum(answer_occurances_entity) / len(answers),
             'web_results:answer_entity_doc_count': 1.0 * sum(answer_doc_occurances_entity) / len(answers),
             'web_results:answer_text_doc_count': 1.0 * sum(answer_doc_occurances_text) / len(answers),
+            'web_results:sliding_window_score': 1.0 * sum(sliding_window_score) / len(answers),
+            'web_results:min_distance_to_question_term_score': 1.0 * sum(min_distance_question_answer_token) / len(answers),
             'web_results:answer_context_question_similarity':
                 1.0 * sum(answer_context_question_similarity) / len(answers),
             'web_results:snippets:answer_entity_occurances': 1.0 * sum(answer_occurances_snippet_entity) / len(answers),

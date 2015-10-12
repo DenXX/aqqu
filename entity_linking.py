@@ -114,6 +114,5 @@ def main_entity_link_text():
         print sorted(entities.values(), key=operator.itemgetter('count'), reverse=True)[:50]
         print sorted(tokens.items(), key=operator.itemgetter(1), reverse=True)[:50]
 
-
 if __name__ == "__main__":
     main_entity_link_text()
