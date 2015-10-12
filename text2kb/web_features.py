@@ -304,11 +304,11 @@ class WebFeatureGenerator:
 
             token_to_pos = doc.get_token_to_positions_map()
             for i, answer_tokens in enumerate(answers_tokens):
-                if answer_contains(answer_tokens, snippets_tokens) > 0.5:
+                if answer_contains(answer_tokens, snippets_tokens) > 0.7:
                     answer_occurances_snippet_text[i] += 1
 
                 if doc_content is not None:
-                    if answer_contains(answer_tokens, doc_tokens) > 0.5:
+                    if answer_contains(answer_tokens, doc_tokens) > 0.7:
                         answer_doc_occurances_text[i] += 1
 
                     # Get a set of positions of answer tokens in the target document.

@@ -1,5 +1,5 @@
 from corenlp_parser.parser import CoreNLPParser
-from text2kb.websearch_features import WebSearchFeatureGenerator
+from text2kb.web_features import WebFeatureGenerator
 
 __author__ = 'dsavenk'
 
@@ -31,7 +31,7 @@ def find_document_entities(document, parser, entity_linker):
 def main_parse():
     globals.read_configuration('config.cfg')
     parser = CoreNLPParser.init_from_config()
-    feature_generator = WebSearchFeatureGenerator.init_from_config()
+    feature_generator = WebFeatureGenerator.init_from_config()
     print datetime.now()
     with open(sys.argv[1], 'w') as out_file:
         index = 0
@@ -47,7 +47,7 @@ def main_parse():
 
 def main_entities():
     globals.read_configuration('config.cfg')
-    feature_generator = WebSearchFeatureGenerator.init_from_config()
+    feature_generator = WebFeatureGenerator.init_from_config()
     import operator
     while True:
         print "Please enter a question:"
@@ -70,7 +70,7 @@ def main():
     globals.read_configuration('config.cfg')
     entity_linker = EntityLinker.init_from_config()
     parser = CoreNLPParser.init_from_config()
-    feature_generator = WebSearchFeatureGenerator.init_from_config()
+    feature_generator = WebFeatureGenerator.init_from_config()
     doc_entities = dict()
     for serp in feature_generator.question_serps.itervalues():
         for doc in serp[:10]:

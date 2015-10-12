@@ -80,8 +80,8 @@ def print_candidates(test_queries):
     :return:
     """
     for test_query in test_queries:
-        if test_query.oracle_f1 == 0:
-            print test_query.utterance, test_query.oracle_position
+        if test_query.f1 != test_query.oracle_f1:
+            print test_query.utterance, test_query.f1, test_query.oracle_f1, test_query.oracle_position
             for rank, candidate in enumerate(test_query.eval_candidates):
                 print "\t" + str(rank) + "\t" + str(candidate.prediction) + "\t" + str(candidate.evaluation_result.f1)
 

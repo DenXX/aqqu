@@ -21,7 +21,7 @@ from sklearn.feature_selection import SelectKBest, chi2, SelectPercentile
 from sklearn.externals import joblib
 from sklearn.metrics import classification_report
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, \
-    AdaBoostRegressor, RandomForestRegressor, ExtraTreesClassifier
+    AdaBoostRegressor, RandomForestRegressor, ExtraTreesClassifier, GradientBoostingClassifier 
 from sklearn import pipeline, grid_search
 from sklearn.linear_model import SGDClassifier, SGDRegressor, \
     LogisticRegressionCV, LogisticRegression
@@ -186,16 +186,17 @@ class AccuModel(MLModel, Ranker):
         self.top_ngram_percentile = top_ngram_percentile
         self.rel_regularization_C = rel_regularization_C
         self.use_pruning = use_pruning
-        # Only extract ngram features.
+        # Feature extractor for ranking model.
         self.feature_extractor = FeatureExtractor(True,
                                                   False,
                                                   None,
                                                   text_features=extract_text_features_ranking)
-        self.prune_feature_extractor = FeatureExtractor(True,
-                                                        False,
-                                                        None,
-                                                        entity_features=True,
-                                                        text_features=extract_text_features_pruning)
+        if self.use_pruning:
+            self.prune_feature_extractor = FeatureExtractor(True,
+                                                            False,
+                                                            None,
+                                                            entity_features=True,
+                                                            text_features=extract_text_features_pruning)
 
     def load_model(self):
         model_file = self.get_model_filename()
@@ -210,11 +211,15 @@ class AccuModel(MLModel, Ranker):
                                                   percentile=self.top_ngram_percentile)
             relation_scorer.load_model()
             self.feature_extractor.relation_score_model = relation_scorer
-            self.prune_feature_extractor.relation_score_model = relation_scorer
-            pruner = CandidatePruner(self.get_model_name(),
+
+            # Load pruning model if needed
+            if self.use_pruning:
+                self.prune_feature_extractor.relation_score_model = relation_scorer
+                pruner = CandidatePruner(self.get_model_name(),
                                      self.prune_feature_extractor)
-            pruner.load_model()
-            self.pruner = pruner
+                pruner.load_model()
+                self.pruner = pruner
+
             self.dict_vec = dict_vec
             self.label_encoder = label_enc
             self.correct_index = label_enc.transform([1])[0]
@@ -261,14 +266,19 @@ class AccuModel(MLModel, Ranker):
             rel_model = self.learn_rel_score_model(train_fold)
             self.feature_extractor.relation_score_model = rel_model
             logger.info("Applying relation score model.")
+
+            # Create an example for pruning classifier.
+            if self.use_pruning:
+                testfold_features, testfold_labels = construct_examples(
+                    test_fold,
+                    self.prune_feature_extractor)
+                features.extend(testfold_features)
+                labels.extend(testfold_labels)
+
+            # Create a pairwise example for ranking model.
             testfoldpair_features, testfoldpair_labels = construct_pair_examples(
                 test_fold,
                 self.feature_extractor)
-            testfold_features, testfold_labels = construct_examples(
-                test_fold,
-                self.prune_feature_extractor)
-            features.extend(testfold_features)
-            labels.extend(testfold_labels)
             pair_features.extend(testfoldpair_features)
             pair_labels.extend(testfoldpair_labels)
             num_fold += 1
@@ -276,9 +286,13 @@ class AccuModel(MLModel, Ranker):
         logger.info("Training final relation scorer.")
         rel_model = self.learn_rel_score_model(train_queries)
         self.feature_extractor.relation_score_model = rel_model
-        self.prune_feature_extractor.relation_score_model = rel_model
         self.relation_scorer = rel_model
-        self.pruner = self.learn_prune_model(labels, features)
+
+        # Train pruning model if needed.
+        if self.use_pruning:
+            self.prune_feature_extractor.relation_score_model = rel_model
+            self.pruner = self.learn_prune_model(labels, features)
+
         self.learn_ranking_model(pair_features, pair_labels)
 
     def learn_ranking_model(self, features, labels):
@@ -291,9 +305,9 @@ class AccuModel(MLModel, Ranker):
         X = vec.fit_transform(features)
         X, labels = utils.shuffle(X, labels, random_state=999)
         decision_tree = RandomForestClassifier(class_weight='auto',
-                                               random_state=999,
-                                               n_jobs=N_JOBS,
-                                               n_estimators=90)
+                                              random_state=999,
+                                              n_jobs=N_JOBS,
+                                              n_estimators=90)
         logger.info("Training random forest...")
         decision_tree.fit(X, labels)
         logger.info("Done.")
@@ -317,7 +331,11 @@ class AccuModel(MLModel, Ranker):
                      self.dict_vec, self.scaler],
                     self.get_model_filename())
         self.relation_scorer.store_model()
-        self.pruner.store_model()
+
+        # Store pruning model if needed.
+        if self.use_pruning:
+            self.pruner.store_model()
+
         logger.info("Done.")
 
     def compare_pair(self, x_candidate, y_candidate):
@@ -417,10 +435,14 @@ class AccuModel(MLModel, Ranker):
             self.load_model()
         query_candidates = shuffle_candidates(query_candidates, key)
         num_candidates = len(query_candidates)
-        logger.debug("Pruning %s candidates" % num_candidates)
-        query_candidates = self.prune_candidates(query_candidates, key)
-        logger.debug("%s of %s candidates remain" % (len(query_candidates),
-                                                    num_candidates))
+        if self.use_pruning:
+            logger.debug("Pruning %s candidates" % num_candidates)
+            query_candidates = self.prune_candidates(query_candidates, key)
+            logger.debug("%s of %s candidates remain" % (len(query_candidates),
+                                                        num_candidates))
+        else:
+            logger.debug("%s candidates" % len(query_candidates))
+
         start = time.time()
         candidates = [key(q) for q in query_candidates]
         self._precompute_cmp(candidates)
@@ -438,8 +460,6 @@ class AccuModel(MLModel, Ranker):
         return ranked_candidates
 
     def prune_candidates(self, query_candidates, key):
-        if not self.use_pruning:
-            return query_candidates
         remaining = []
         if len(query_candidates) > 0:
             remaining = self.pruner.prune_candidates(query_candidates, key)
