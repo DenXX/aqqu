@@ -178,9 +178,9 @@ def compute_min_distance_question_answer(question_tokens_positions, answer_token
         a_pos = answer_tokens_positions[a_index]
         diff = min(diff, abs(q_pos - a_pos))
         if q_pos < a_pos:
-            q_pos += 1
+            q_index += 1
         else:
-            a_pos += 1
+            a_index += 1
 
     return 1.0 / (document_length + 1) * diff if diff < INF else 1.0
 
