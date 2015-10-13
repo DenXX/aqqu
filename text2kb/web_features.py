@@ -121,59 +121,68 @@ def compute_sliding_window_score(question_tokens, answer_tokens, doc_content):
     answer_tokens = set(answer_tokens)
     passage_tokens = dict()
     passage_lemma = dict()
+    score = 0
     for i in xrange(end_index):
         token, lemma = doc_content[i]
-        if token not in passage_tokens:
-            passage_tokens[token] = 0
-        if lemma not in passage_lemma:
-            passage_lemma[lemma] = 0
-        passage_lemma[lemma] += 1
-        passage_tokens[token] += 1
-    score = compute_single_sliding_window_score(answer_tokens, passage_lemma, passage_tokens, question_lemmas)
+        score = update_score_for_token(answer_tokens, score, passage_tokens, token, +1)
+        score = update_score_for_token(question_lemmas, score, passage_lemma, lemma, +1)
 
+    current_score = score
     while end_index < len(doc_content):
         to_remove_token, to_remove_lemma = doc_content[begin_index]
-        passage_tokens[to_remove_token] -= 1
-        if passage_tokens[to_remove_token] == 0:
-            del passage_tokens[to_remove_token]
-        passage_lemma[to_remove_lemma] -= 1
-        if passage_lemma[to_remove_lemma] == 0:
-            del passage_lemma[to_remove_lemma]
+        current_score = update_score_for_token(answer_tokens, current_score, passage_tokens, to_remove_token, -1)
+        current_score = update_score_for_token(question_lemmas, current_score, passage_lemma, to_remove_lemma, -1)
+
         new_token, new_lemma = doc_content[end_index]
-        if new_token not in passage_tokens:
-            passage_tokens[new_token] = 0
-        if new_lemma not in passage_lemma:
-            passage_lemma[new_lemma] = 0
-        passage_lemma[new_lemma] += 1
-        passage_tokens[new_token] += 1
-        # TODO(denxx): This is too slow, we can update the score without recomputing it.
-        score = max(score, compute_single_sliding_window_score(answer_tokens,
-                                                               passage_lemma,
-                                                               passage_tokens,
-                                                               question_lemmas))
+
+        current_score = update_score_for_token(answer_tokens, current_score, passage_tokens, new_token, +1)
+        current_score = update_score_for_token(question_lemmas, current_score, passage_lemma, new_lemma, +1)
+
+        score = max(score, current_score)
         begin_index += 1
         end_index += 1
 
     return score
 
 
-def compute_single_sliding_window_score(answer_tokens, passage_lemma, passage_tokens, question_lemmas):
-    score = 0.0
-    for token, count in passage_tokens.iteritems():
-        if token in answer_tokens:
-            score += log(1 + 1.0 / count)
-    for lemma, count in passage_lemma.iteritems():
-        if lemma in question_lemmas:
-            score += log(1 + 1.0 / count)
-    return score
+def update_score_for_token(target_tokens, current_score, passage_tokens, to_remove_token, delta):
+    if to_remove_token not in passage_tokens:
+        passage_tokens[to_remove_token] = 0
+
+    # If the token belongs to the target set (question or answer tokens), them we update the score
+    if to_remove_token in target_tokens:
+        count = passage_tokens[to_remove_token]
+        if count > 0:
+            current_score -= log(1.0 + 1.0 / count)
+        if count + delta > 0:
+            current_score += log(1.0 + 1.0 / (count + delta))
+
+    # Update the counts.
+    passage_tokens[to_remove_token] += delta
+    if passage_tokens[to_remove_token] == 0:
+        del passage_tokens[to_remove_token]
+
+    return current_score
 
 
 def compute_min_distance_question_answer(question_tokens_positions, answer_tokens_positions, document_length):
-    diff = 0
-    for question_pos in question_tokens_positions:
-        for answer_pos in answer_tokens_positions:
-            diff = min(diff, question_pos - answer_pos)
-    return 1.0 / document_length * diff if diff > 0 else 1.0
+    INF = 1000000
+    diff = INF
+    question_tokens_positions = sorted(question_tokens_positions)
+    answer_tokens_positions = sorted(answer_tokens_positions)
+    q_index = 0
+    a_index = 0
+
+    while q_index < len(question_tokens_positions) and a_index < len(answer_tokens_positions):
+        q_pos = question_tokens_positions[q_index]
+        a_pos = answer_tokens_positions[a_index]
+        diff = min(diff, abs(q_pos - a_pos))
+        if q_pos < a_pos:
+            q_pos += 1
+        else:
+            a_pos += 1
+
+    return 1.0 / (document_length + 1) * diff if diff < INF else 1.0
 
 
 class WebSearchResult:
