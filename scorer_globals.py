@@ -57,7 +57,7 @@ def init():
                                      top_ngram_percentile=5,
                                      rel_regularization_C=1.0,
                                      extract_text_features_ranking=True,
-                                     extract_text_features_pruning=False,
+                                     extract_text_features_pruning=True,
                                      use_pruning=True),
                    ranker.SimpleScoreRanker('SimpleRanker'),
                    ranker.SimpleScoreRanker('SimpleRanker_entity_oracle',

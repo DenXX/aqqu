@@ -307,6 +307,13 @@ class QueryCandidate:
         self.features = None
         self.feature_extractor = None
 
+    def __unicode__(self):
+        return u','.join(self.get_entity_names()) +\
+               u'[' + u','.join(self.get_relation_names()) + u']'
+
+    def __repr__(self):
+        return unicode(self)
+
     def get_relation_names(self):
         return sorted([r.name for r in self.relations])
 

@@ -129,6 +129,7 @@ class IdentifiedEntity():
         # A flag indicating whether the entity perfectly
         # matched the tokens.
         self.perfect_match = perfect_match
+        self.position = None
 
     def as_string(self):
         t = u','.join([u"%s" % t.token
@@ -307,6 +308,7 @@ class EntityLinker:
                     ie = IdentifiedEntity(tokens[start:end],
                                           e.name, e, e.score, surface_score,
                                           perfect_match)
+                    ie.position = (start, end)
                     # self.boost_entity_score(ie)
                     identified_entities.append(ie)
         if find_dates:
@@ -329,7 +331,8 @@ class EntityLinker:
                                                     max_token_window=max_token_window,
                                                     find_dates=False)
         entities = ((entity.name, entity.surface_score, entity.score,
-                     entity.entity.id if isinstance(entity.entity, KBEntity) else entity.name) for entity in entities)
+                     entity.entity.id if isinstance(entity.entity, KBEntity) else entity.name,
+                     entity.position) for entity in entities)
         res = []
         for key, values in itertools.groupby(sorted(entities,
                                                     key=operator.itemgetter(3)),
@@ -338,15 +341,18 @@ class EntityLinker:
             max_surface_score = 0
             name = ""
             count = 0
+            positions = []
             for v in values:
                 name = v[0]
                 max_score = max(max_score, v[2])
                 max_surface_score = max(max_surface_score, v[1])
+                positions.append(v[4])
                 count += 1
             res.append({'mid': key,
                         'name': name,
                         'surface_score': max_surface_score,
                         'score': max_score,
+                        'positions': positions,
                         'count': count})
         res.sort(key=operator.itemgetter('count'), reverse=True)
         return res

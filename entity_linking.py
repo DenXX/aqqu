@@ -18,16 +18,6 @@ logging.basicConfig(format='%(asctime)s : %(levelname)s '
 logger = logging.getLogger(__name__)
 
 
-def find_document_entities(document, parser, entity_linker):
-    content = document.content()
-    if len(content.strip()) > 0:
-        tokens = parser.parse(content).tokens[:1000]
-        # Entity linker returns a dictionary from url to a list of entities. Each
-        # entity is a dictionary with keys: 'mid', 'name', 'surface_score', 'score', 'count'
-        return entity_linker.identify_entities_in_document(tokens, min_surface_score=0.5)
-    return []
-
-
 def main_parse():
     globals.read_configuration('config.cfg')
     parser = CoreNLPParser.init_from_config()
@@ -68,14 +58,25 @@ def main_entities():
 
 def main():
     globals.read_configuration('config.cfg')
-    entity_linker = EntityLinker.init_from_config()
-    parser = CoreNLPParser.init_from_config()
-    feature_generator = WebFeatureGenerator.init_from_config()
+    entity_linker = globals.get_entity_linker()
+    config_options = globals.config
+    serp_files = config_options.get('WebSearchFeatures', 'serp-files').split(',')
+    documents_files = config_options.get('WebSearchFeatures', 'documents-files').split(',')
+    content_file = config_options.get('WebSearchFeatures', 'documents-content-file')
+
     doc_entities = dict()
-    for serp in feature_generator.question_serps.itervalues():
+    from text2kb.web_features import _read_serp_files, _read_document_content
+    question_search_results = _read_serp_files(serp_files, documents_files)
+    documents_content = _read_document_content(content_file, return_parsed_tokens=True)
+    index = 0
+    for serp in question_search_results.itervalues():
         for doc in serp[:10]:
-            doc_entities[doc.url] = find_document_entities(doc, parser, entity_linker)
-        
+            if doc.url in documents_content:
+                doc_entities[doc.url] = entity_linker.identify_entities_in_document(documents_content[doc.url],
+                                                                                    min_surface_score=0.5)
+        index += 1
+        if index % 100 == 0:
+            logger.info("%d SERPs processed" % index)
     with open(sys.argv[1], 'w') as out:
         pickle.dump(doc_entities, out)
 
@@ -115,4 +116,4 @@ def main_entity_link_text():
         print sorted(tokens.items(), key=operator.itemgetter(1), reverse=True)[:50]
 
 if __name__ == "__main__":
-    main_entity_link_text()
+    main()

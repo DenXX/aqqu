@@ -4,6 +4,7 @@ import cPickle as pickle
 import json
 import logging
 from math import log
+import operator
 import globals
 import os
 from query_translator.features import get_query_text_tokens
@@ -12,7 +13,7 @@ from collections import Counter
 __author__ = 'dsavenk'
 
 TOPN = 10
-WINDOW_SIZE = 3
+WINDOW_SIZE = 5
 SLIDING_WINDOW_SIZE = 20
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ def _read_serp_files(serp_files, document_files):
     return question_search_results
 
 
-def _read_document_content(document_content_file):
+def _read_document_content(document_content_file, return_parsed_tokens=False):
     logger.info("Reading documents content...")
     global documents_content
     documents_content = dict()
@@ -64,8 +65,11 @@ def _read_document_content(document_content_file):
         while True:
             try:
                 url, content = pickle.load(content_input)
-                tokens = [(token.token.lower(), token.lemma.lower()) for token in content.tokens]
-                documents_content[url] = tokens
+                if not return_parsed_tokens:
+                    tokens = [(token.token.lower(), token.lemma.lower()) for token in content.tokens]
+                    documents_content[url] = tokens
+                else:
+                    documents_content[url] = content.tokens
             except (EOFError, pickle.UnpicklingError):
                 break
             index += 1
@@ -113,69 +117,63 @@ def compute_tokenset_similarity(question_tokenset, answer_tokenset):
     return 1.0 * res / (sqrt(len(question_tokenset))) / sqrt(sum)
 
 
-def compute_sliding_window_score(question_tokens, answer_tokens, doc_content):
-    begin_index = 0
-    end_index = min(len(doc_content), SLIDING_WINDOW_SIZE)
-
-    question_lemmas = set(question_tokens)
-    answer_tokens = set(answer_tokens)
-    passage_tokens = dict()
-    passage_lemma = dict()
+def compute_sliding_window_score(matched_positions, token_to_pos, lemma_to_pos, answer_tokens):
+    total_token_counts = dict((token, len(pos)) for token, pos in token_to_pos.iteritems())
+    total_token_counts.update(dict((lemma, len(pos)) for lemma, pos in lemma_to_pos.iteritems()))
+    begin = 0
+    end = 0
+    token_counts = dict()
+    answer_token_counts = dict()
     score = 0
-    for i in xrange(end_index):
-        token, lemma = doc_content[i]
-        score = update_score_for_token(answer_tokens, score, passage_tokens, token, +1)
-        score = update_score_for_token(question_lemmas, score, passage_lemma, lemma, +1)
+    best_beg = 0
+    best_end = 0
+    current_score = 0
+    while begin < len(matched_positions):
+        while end < len(matched_positions) and \
+                                matched_positions[end][0] - matched_positions[begin][0] < SLIDING_WINDOW_SIZE:
+            token = matched_positions[end][1]
+            if token not in token_counts:
+                token_counts[token] = 0
+                current_score += log(1 + 1.0 / total_token_counts[token])
+            if token in answer_tokens:
+                if token not in answer_token_counts:
+                    answer_token_counts[token] = 0
+                answer_token_counts[token] += 1
+            token_counts[token] += 1
+            end += 1
 
-    current_score = score
-    while end_index < len(doc_content):
-        to_remove_token, to_remove_lemma = doc_content[begin_index]
-        current_score = update_score_for_token(answer_tokens, current_score, passage_tokens, to_remove_token, -1)
-        current_score = update_score_for_token(question_lemmas, current_score, passage_lemma, to_remove_lemma, -1)
+        if len(answer_token_counts.keys()) > 0.7 * len(answer_tokens) and current_score > score:
+            score = current_score
+            best_beg = begin
+            best_end = end
 
-        new_token, new_lemma = doc_content[end_index]
-
-        current_score = update_score_for_token(answer_tokens, current_score, passage_tokens, new_token, +1)
-        current_score = update_score_for_token(question_lemmas, current_score, passage_lemma, new_lemma, +1)
-
-        score = max(score, current_score)
-        begin_index += 1
-        end_index += 1
-
-    return score
-
-
-def update_score_for_token(target_tokens, current_score, passage_tokens, to_remove_token, delta):
-    if to_remove_token not in passage_tokens:
-        passage_tokens[to_remove_token] = 0
-
-    # If the token belongs to the target set (question or answer tokens), them we update the score
-    if to_remove_token in target_tokens:
-        count = passage_tokens[to_remove_token]
-        if count > 0:
-            current_score -= log(1.0 + 1.0 / count)
-        if count + delta > 0:
-            current_score += log(1.0 + 1.0 / (count + delta))
-
-    # Update the counts.
-    passage_tokens[to_remove_token] += delta
-    if passage_tokens[to_remove_token] == 0:
-        del passage_tokens[to_remove_token]
-
-    return current_score
+        # Exclude the beginning token
+        token = matched_positions[begin][1]
+        token_counts[token] -= 1
+        if token_counts[token] == 0:
+            del token_counts[token]
+            current_score -= log(1 + 1.0 / total_token_counts[token])
+        if token in answer_tokens:
+            answer_token_counts[token] -= 1
+            if answer_token_counts[token] == 0:
+                del answer_token_counts[token]
+        begin += 1
+    return score, best_beg, best_end
 
 
 def compute_min_distance_question_answer(question_tokens_positions, answer_tokens_positions, document_length):
     INF = 1000000
     diff = INF
-    question_tokens_positions = sorted(question_tokens_positions)
-    answer_tokens_positions = sorted(answer_tokens_positions)
+    question_tokens_pos = set(map(lambda x: x[0], question_tokens_positions))
+    answer_tokens_pos = map(lambda x: x[0], answer_tokens_positions.difference(question_tokens_pos))
+    question_tokens_pos = sorted(question_tokens_pos)
+    answer_tokens_pos = sorted(answer_tokens_pos)
     q_index = 0
     a_index = 0
 
-    while q_index < len(question_tokens_positions) and a_index < len(answer_tokens_positions):
-        q_pos = question_tokens_positions[q_index]
-        a_pos = answer_tokens_positions[a_index]
+    while q_index < len(question_tokens_pos) and a_index < len(answer_tokens_pos):
+        q_pos = question_tokens_pos[q_index]
+        a_pos = answer_tokens_pos[a_index]
         diff = min(diff, abs(q_pos - a_pos))
         if q_pos < a_pos:
             q_index += 1
@@ -338,8 +336,8 @@ class WebFeatureGenerator:
 
         question_entities = [entity.entity.name.lower() for entity in candidate.matched_entities]
 
-        question_tokens = set(get_query_text_tokens(candidate))
         stopwords = globals.get_stopwords()
+        question_tokens = set(filter(lambda token: token not in stopwords, get_query_text_tokens(candidate)))
         answers_lower = map(unicode.lower, answers)
         answers_tokens = [filter(lambda token: token not in stopwords, answer.split())
                           for answer in answers_lower]
@@ -393,25 +391,28 @@ class WebFeatureGenerator:
                     if answer_contains(answer_tokens, doc_tokens) > 0.7:
                         answer_doc_occurances_text[i] += 1
 
-                    sliding_window_score[i] += compute_sliding_window_score(question_tokens, answer_tokens, doc_content)
-
                     # Get a set of positions of answer tokens in the target document.
-                    answer_tokens_positions = set(pos
+                    answer_tokens_positions = set((pos, answer_token)
                                                   for answer_token in answer_tokens
                                                   if answer_token in token_to_pos
                                                   for pos in token_to_pos[answer_token])
-                    question_tokens_positions = set(pos for question_lemma in question_tokens
+                    question_tokens_positions = set((pos, question_lemma)
+                                                    for question_lemma in question_tokens
                                                     if question_lemma in lemma_to_pos
-                                                    for pos in lemma_to_pos[question_lemma]
-                                                    if pos not in answer_tokens_positions)
-
+                                                    for pos in lemma_to_pos[question_lemma])
+                    matched_positions = sorted(answer_tokens_positions.union(question_tokens_positions),
+                                               key=operator.itemgetter(0))
+                    score, beg, end = compute_sliding_window_score(matched_positions,
+                                                                   token_to_pos,
+                                                                   lemma_to_pos,
+                                                                   answer_tokens)
+                    sliding_window_score[i] += score
                     min_distance_question_answer_token[i] += compute_min_distance_question_answer(
                         question_tokens_positions, answer_tokens_positions, len(doc_content))
 
-
                     # Get a set of actual tokens in the neighbourhood of answer tokens.
                     answer_tokens_neighborhood = Counter([doc_content[neighbor][1]  # [1] is lemma
-                                                          for pos in answer_tokens_positions
+                                                          for pos, _ in answer_tokens_positions
                                                           for neighbor in range(max(0, pos - WINDOW_SIZE),
                                                                                 min(len(doc_content),
                                                                                     pos + WINDOW_SIZE + 1))
