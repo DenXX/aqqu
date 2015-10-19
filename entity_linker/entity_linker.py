@@ -115,7 +115,10 @@ class IdentifiedEntity():
     def __init__(self, tokens,
                  name, entity,
                  score=0, surface_score=0,
-                 perfect_match=False):
+                 perfect_match=False,
+                 external_entity=False,
+                 use_as_seed_entity=True,
+                 external_entity_count=0):
         # A readable name to be displayed to the user.
         self.name = name
         # The tokens that matched this entity.
@@ -129,16 +132,30 @@ class IdentifiedEntity():
         # A flag indicating whether the entity perfectly
         # matched the tokens.
         self.perfect_match = perfect_match
+        # Position in tokens in the original text where
+        # this entity mention was found.
         self.position = None
+        # True if this entity was found not in the original text, but
+        # from some extension, such as search results.
+        self.external_entity = external_entity
+        # The number of times this entity was found in the external data,
+        # such as search results.
+        self.external_entity_count = external_entity_count
+        # Whether to allow to use this entity to start building a new candidate,
+        # i.e. as the main entity in the question. Other entities can be used
+        # as filter entities.
+        self.use_as_seed_entity = use_as_seed_entity
 
     def as_string(self):
         t = u','.join([u"%s" % t.token
                       for t in self.tokens])
-        return u"%s: tokens:%s prob:%.3f score:%s perfect_match:%s" % \
+        return u"%s: tokens:%s prob:%.3f score:%s perfect_match:%s external:%s external_count:%d" % \
                (self.name, t,
                 self.surface_score,
                 self.score,
-                self.perfect_match)
+                self.perfect_match,
+                "Yes" if self.external_entity else "No",
+                self.external_entity_count)
 
     def overlaps(self, other):
         """Check whether the other identified entity overlaps this one."""
@@ -274,10 +291,13 @@ class EntityLinker:
                     identified_dates.append(ie)
         return identified_dates
 
-    def identify_entities_in_tokens(self, tokens, min_surface_score=0.1, max_token_window=-1, find_dates=True):
+    def identify_entities_in_tokens(self, tokens, text='', min_surface_score=0.1,
+                                    max_token_window=-1, find_dates=True):
         '''
         Identify instances in the tokens.
         :param tokens: A list of string tokens.
+        :param text: The original text, not used in this method, but can be
+                     used by subclasses.
         :return: A list of tuples (i, j, e, score) for an identified entity e,
                  at token index i (inclusive) to j (exclusive)
         '''
@@ -460,6 +480,108 @@ class EntityLinker:
                 maximal = False
         if maximal:
             maximal_sets.append(maximal_set)
+
+
+class WebSearchResultsExtenderEntityLinker(EntityLinker):
+    # How many entities found in search results is allowed to use to build new candidate
+    # queries. The rest of the entities can be used to build type-3 queries.
+    TOP_ENTITIES_AS_SEEDS = 3
+
+    def __init__(self, surface_index, max_entities_per_tokens=4, use_web_results=True, search_results=None,
+                 doc_snippets_entities=None):
+        if not doc_snippets_entities:
+            doc_snippets_entities = dict()
+        if not search_results:
+            search_results = dict()
+        EntityLinker.__init__(self, surface_index, max_entities_per_tokens)
+        self.use_web_results = use_web_results
+        if self.use_web_results:
+            self.search_results = search_results
+            self.doc_snippets_entities = doc_snippets_entities
+
+    @staticmethod
+    def init_from_config():
+        config_options = globals.config
+        surface_index = EntitySurfaceIndexMemory.init_from_config()
+        max_entities_p_token = int(config_options.get('EntityLinker',
+                                                      'max-entites-per-tokens'))
+        use_web_results = config_options.get('EntityLinker',
+                                             'use-web-results') == "True"
+        question_search_results = dict()
+        doc_snippets_entities = dict()
+        if use_web_results:
+            from text2kb.web_features import _read_serp_files, _read_document_snippet_entities
+            serp_files = globals.config.get('WebSearchFeatures', 'serp-files').split(',')
+            documents_files = globals.config.get('WebSearchFeatures', 'documents-files').split(',')
+            document_snippet_entities_file = globals.config.get('WebSearchFeatures', 'document-snippet-entities')
+            question_search_results = _read_serp_files(serp_files, documents_files)
+            doc_snippets_entities = _read_document_snippet_entities(document_snippet_entities_file)
+        return WebSearchResultsExtenderEntityLinker(surface_index,
+                                                    max_entities_p_token,
+                                                    use_web_results,
+                                                    search_results=question_search_results,
+                                                    doc_snippets_entities=doc_snippets_entities)
+
+    def identify_entities_in_tokens(self, tokens, text='', min_surface_score=0.1,
+                                    max_token_window=-1, find_dates=True):
+        """
+        Overrides method that finds entity occurances in the list of tokens and extends the list of tokens with
+        entities derived from web search results for the question.
+        :param tokens:
+        :param text: The text of the original question, which is used to lookup search results and use entities
+                     from the snippets to extend the list of entities detected in the question.
+        :param min_surface_score: Minimum surface score of entity match.
+        :param max_token_window: The maximum width of the token window, -1 considers all possible windows.
+        :param find_dates: Whether to find dates.
+        :return: A list of detected entities.
+        """
+        entities = EntityLinker.identify_entities_in_tokens(self, tokens, text=text,
+                                                            min_surface_score=min_surface_score,
+                                                            max_token_window=max_token_window,
+                                                            find_dates=find_dates)
+        # Extend with entities found in search results if needed.
+        if self.use_web_results:
+            entities.extend(self._get_search_results_snippets_entities(text, entities))
+        return entities
+
+    def _get_search_results_snippets_entities(self, question, identified_entities):
+        """
+        Returns a list of entities that are found in snippets of search results when question is issued
+        as a query to a search engine.
+        :param question: Original question.
+        :param identified_entities: Entities already identified from the given question.
+        :return: A list of entities found in snippets.
+        """
+        entities = []
+        identified_entity_mids = dict((entity.entity.id, entity) for entity in identified_entities
+                                      if isinstance(entity.entity, KBEntity))
+
+        if question not in self.search_results:
+            logger.warning("Question '%s' not found in SERPs dictionary!" % question)
+            return entities
+
+        for doc in self.search_results[question][:globals.SEARCH_RESULTS_TOPN]:
+            if doc.url not in self.doc_snippets_entities:
+                logger.warning("Document %s not found in document snippets entities dictionary!" % doc.url)
+                continue
+            for index, entity in enumerate(self.doc_snippets_entities[doc.url]):
+                if entity['mid'] not in identified_entity_mids:
+                    kb_entity = KBEntity(entity['name'], entity['mid'], entity['score'], None)
+                    perfect_match = self._text_matches_main_name(
+                        kb_entity, ' '.join(token.token for token in entity['matches'][0]))
+                    is_seed = index < WebSearchResultsExtenderEntityLinker.TOP_ENTITIES_AS_SEEDS
+                    # TODO(denxx): At the moment I only take the first match. This might be ok, but need to check.
+                    ie = IdentifiedEntity(entity['matches'][0],
+                                          kb_entity.name, kb_entity, kb_entity.score,
+                                          entity['surface_score'], perfect_match=perfect_match,
+                                          external_entity=True,
+                                          use_as_seed_entity=is_seed,   # we only
+                                          external_entity_count=entity['count'])
+                    entities.append(ie)
+                else:
+                    # Update the external entity count.
+                    identified_entity_mids[entity['mid']].external_entity_count += entity['count']
+        return entities
 
 
 if __name__ == '__main__':

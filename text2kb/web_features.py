@@ -12,7 +12,6 @@ from collections import Counter
 
 __author__ = 'dsavenk'
 
-TOPN = 10
 WINDOW_SIZE = 5
 SLIDING_WINDOW_SIZE = 20
 
@@ -22,6 +21,7 @@ logger = logging.getLogger(__name__)
 question_search_results = None
 documents_content = None
 documents_entities = None
+document_snippet_entities = None
 
 
 def _read_serp_files(serp_files, document_files):
@@ -80,18 +80,29 @@ def _read_document_content(document_content_file, return_parsed_tokens=False):
 
 
 def _read_entities(document_entities_file):
-    logger.info("Reading documents entities...")
     global documents_entities
-    documents_entities = dict()
-    with open(document_entities_file) as entities_file:
-        url_entities = pickle.load(entities_file)
-    for url, entities in url_entities.iteritems():
-        doc_entities = dict()
-        documents_entities[url] = doc_entities
-        for entity in entities:
-            doc_entities[entity['name'].lower()] = entity
-    logger.info("Reading documents entities done!")
+    if documents_entities is None:
+        logger.info("Reading documents entities...")
+        documents_entities = dict()
+        with open(document_entities_file) as entities_file:
+            url_entities = pickle.load(entities_file)
+        for url, entities in url_entities.iteritems():
+            doc_entities = dict()
+            documents_entities[url] = doc_entities
+            for entity in entities:
+                doc_entities[entity['name'].lower()] = entity
+        logger.info("Reading documents entities done!")
     return documents_entities
+
+
+def _read_document_snippet_entities(document_snippet_entities_file):
+    global document_snippet_entities
+    if document_snippet_entities is None:
+        logger.info("Reading documents snippet entities...")
+        with open(document_snippet_entities_file) as entities_file:
+            document_snippet_entities = pickle.load(entities_file)
+        logger.info("Reading documents snippet entities done!")
+    return document_snippet_entities
 
 
 def answer_contains(answer_tokens, doc_tokens_set):
@@ -357,7 +368,7 @@ class WebFeatureGenerator:
         for i in xrange(len(answers)):
             answer_neighbourhood.append(set())
 
-        for rank, doc in enumerate(question_search_results[question][:TOPN]):
+        for rank, doc in enumerate(question_search_results[question][:globals.SEARCH_RESULTS_TOPN]):
             doc_content = doc.parsed_content()
             doc_tokens = doc.get_content_tokens_set()
             doc_entities = doc.mentioned_entities()
@@ -426,7 +437,8 @@ class WebFeatureGenerator:
             'web_results:answer_entity_doc_count': 1.0 * sum(answer_doc_occurances_entity) / len(answers),
             'web_results:answer_text_doc_count': 1.0 * sum(answer_doc_occurances_text) / len(answers),
             'web_results:sliding_window_score': 1.0 * sum(sliding_window_score) / len(answers),
-            'web_results:min_distance_to_question_term_score': 1.0 * sum(min_distance_question_answer_token) / len(answers),
+            'web_results:min_distance_to_question_term_score': 1.0 * sum(min_distance_question_answer_token) / len(
+                answers),
             'web_results:answer_context_question_similarity':
                 1.0 * sum(answer_context_question_similarity) / len(answers),
             'web_results:snippets:answer_entity_occurances': 1.0 * sum(answer_occurances_snippet_entity) / len(answers),

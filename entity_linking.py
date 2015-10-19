@@ -121,6 +121,43 @@ def main_entity_link_text():
         print sorted(entities.values(), key=operator.itemgetter('count'), reverse=True)[:50]
         print sorted(tokens.items(), key=operator.itemgetter(1), reverse=True)[:50]
 
+
+def entity_link_snippets():
+    globals.read_configuration('config.cfg')
+    entity_linker = globals.get_entity_linker()
+    from text2kb.web_features import _read_serp_files
+    serp_files = globals.config.get('WebSearchFeatures', 'serp-files').split(',')
+    documents_files = globals.config.get('WebSearchFeatures', 'documents-files').split(',')
+    question_search_results = _read_serp_files(serp_files, documents_files)
+    doc_snippet_entities = dict()
+    for index, serp in enumerate(question_search_results.itervalues()):
+        for doc in serp[:globals.SEARCH_RESULTS_TOPN]:
+            snippet_tokens = doc.get_snippet_tokens()
+            entities = entity_linker.identify_entities_in_document(snippet_tokens)
+            for entity in entities:
+                entity['matches'] = []
+                for position in entity['positions']:
+                    entity['matches'].append(snippet_tokens[position[0]:position[1]])
+            doc_snippet_entities[doc.url] = entities
+        if index % 100 == 0:
+            logger.info("Processed %d serps" % index)
+    logger.info("Pickling the dictionary...")
+    with open(sys.argv[1], 'w') as out:
+        pickle.dump(doc_snippet_entities, out)
+    logger.info("Pickling the dictionary DONE!")
+
+
+def test_new_entity_linker():
+    globals.read_configuration('config.cfg')
+    from query_translator.translator import QueryTranslator
+    query_translator = QueryTranslator.init_from_config()
+    while True:
+        question = sys.stdin.readline().strip()
+        print "Translation: ", query_translator.translate_query(question)
+
+
 if __name__ == "__main__":
     # main_entities()  # For entity linking from SERP for a question
-    main_entity_link_text()  # For entity linking from arbitrary text
+    # main_entity_link_text()  # For entity linking from arbitrary text
+    # entity_link_snippets()
+    test_new_entity_linker()

@@ -30,7 +30,6 @@ class Query:
         self.query_tokens = None
         self.query_content_tokens = None
         self.identified_entities = None
-        self.consistent_entities = None
         self.relation_oracle = None
         self.is_count_query = False
         self.transform_query(self.query_text)
@@ -145,7 +144,7 @@ class QueryTranslator(object):
         query.query_tokens = tokens
         if not self.scorer.get_parameters().entity_oracle:
             entities = self.entity_linker.identify_entities_in_tokens(
-                query.query_tokens)
+                query.query_tokens, text=query_text)
         else:
             entity_oracle = self.scorer.get_parameters().entity_oracle
             entities = entity_oracle.identify_entities_in_tokens(

@@ -31,6 +31,10 @@ def init():
                                      "webquestionstrain",
                                      top_ngram_percentile=5,
                                      rel_regularization_C=1.0),
+                   ranker.AccuModel('WQ_Ranker_ExternalEntities',
+                                     "webquestionstrain_externalentities",
+                                     top_ngram_percentile=5,
+                                     rel_regularization_C=1.0),
                    ranker.AccuModel('WQ_Ranker_WithTextRank',
                                      "webquestionstrain",
                                      top_ngram_percentile=5,
@@ -40,6 +44,13 @@ def init():
                                      use_pruning=True),
                    ranker.AccuModel('WQ_Ranker_WithTextPruneRank',
                                      "webquestionstrain",
+                                     top_ngram_percentile=5,
+                                     rel_regularization_C=1.0,
+                                     extract_text_features_pruning=True,
+                                     extract_text_features_ranking=True,
+                                     use_pruning=True),
+                   ranker.AccuModel('WQ_Ranker_WithTextPruneRank_ExternalEntities',
+                                     "webquestionstrain_externalentities",
                                      top_ngram_percentile=5,
                                      rel_regularization_C=1.0,
                                      extract_text_features_pruning=True,
@@ -125,5 +136,11 @@ def init():
          ('webquestions_split_dev',
           'evaluation-data/'
           'webquestions.split.dev.json'),
+         ('webquestionstrain_externalentities',
+          'evaluation-data/'
+          'webquestions.train.json'),
+         ('webquestionstest_externalentities',
+          'evaluation-data/'
+          'webquestions.test.json'),
          ]
     )

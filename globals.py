@@ -15,6 +15,8 @@ FREEBASE_SPARQL_PREFIX = "fb"
 FREEBASE_NAME_RELATION = "type.object.name"
 FREEBASE_KEY_PREFIX = "http://rdf.freebase.com/key/"
 
+SEARCH_RESULTS_TOPN = 10
+
 sparql_backend = None
 # When a configuration is read, store it here to make it accessible.
 config = None
@@ -53,8 +55,8 @@ def get_entity_linker():
     global _entity_linker
     if _entity_linker is not None:
         return _entity_linker
-    from entity_linker.entity_linker import EntityLinker
-    _entity_linker = EntityLinker.init_from_config()
+    from entity_linker.entity_linker import EntityLinker, WebSearchResultsExtenderEntityLinker
+    _entity_linker = WebSearchResultsExtenderEntityLinker.init_from_config()
     return _entity_linker
 
 

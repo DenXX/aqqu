@@ -141,10 +141,15 @@ class FeatureExtractor(object):
         em_surface_scores = []
         em_pop_scores = []
         n_entity_tokens = 0
+        n_external_entities = 0
+        external_count = 0
         for em in candidate.matched_entities:
             # A threshold above which we consider the match a literal match.
             threshold = 0.8
             n_entity_tokens += len(em.entity.tokens)
+            if em.external_entity:
+                n_external_entities += 1
+            external_count += em.external_entity_count
             if em.entity.perfect_match or em.entity.surface_score > threshold:
                 n_literal_entities += 1
                 literal_entities_length += len(em.entity.tokens)
@@ -224,6 +229,12 @@ class FeatureExtractor(object):
                     'total_literal_length': (literal_entities_length
                                              + n_literal_relations),
                 })
+                if external_count > 0:
+                    features['avg_entity_external_count'] = external_count / n_entity_matches
+                    features['sum_entity_external_count'] = external_count
+                if n_external_entities > 0:
+                    features['external_entities'] = n_external_entities
+
             features.update({
                 # "Relation Features"
                 'n_relations': len(candidate.get_relation_names()),

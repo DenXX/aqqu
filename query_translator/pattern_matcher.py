@@ -245,7 +245,7 @@ class QueryPatternMatcher:
     def construct_initial_query_candidates(self):
         query_candidates = []
         for entity in self.query.identified_entities:
-            if isinstance(entity.entity, Value):
+            if isinstance(entity.entity, Value) or not entity.use_as_seed_entity:
                 logger.info("Ignoring %s as start entity." % entity.name)
                 continue
             query_candidate = qc.QueryCandidate(self.query, self.sparql_backend)
