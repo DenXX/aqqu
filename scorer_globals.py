@@ -31,6 +31,10 @@ def init():
                                      "webquestionstrain",
                                      top_ngram_percentile=5,
                                      rel_regularization_C=1.0),
+                   ranker.AccuModel('WQ_Ranker_Dev',
+                                     "webquestions_split_train",
+                                     top_ngram_percentile=5,
+                                     rel_regularization_C=1.0),
                    ranker.AccuModel('WQ_Ranker_ExternalEntities',
                                      "webquestionstrain_externalentities",
                                      top_ngram_percentile=5,
@@ -138,9 +142,9 @@ def init():
           'webquestions.split.dev.json'),
          ('webquestionstrain_externalentities',
           'evaluation-data/'
-          'webquestions.train.json'),
+          'webquestions.train.copy.json'),
          ('webquestionstest_externalentities',
           'evaluation-data/'
-          'webquestions.test.json'),
+          'webquestions.test.copy.json'),
          ]
     )

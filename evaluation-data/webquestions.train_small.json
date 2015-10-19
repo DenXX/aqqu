@@ -1,0 +1,61 @@
+[
+  {
+    "url": "http://www.freebase.com/view/en/bosnia_and_herzegovina", 
+    "targetValue": "(list (description Europe) (description Eurasia) (description Balkans))", 
+    "utterance": "where is bosnia?", 
+    "id": 1, 
+    "result": [
+      "Europe", 
+      "Eurasia", 
+      "Balkans"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/mr_blackwell", 
+    "targetValue": "(list (description Critic) (description Journalist) (description Actor) (description \"Fashion Designer\"))", 
+    "utterance": "who is blackwell?", 
+    "id": 2, 
+    "result": [
+      "Critic", 
+      "Journalist", 
+      "Actor", 
+      "Fashion Designer"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/united_states", 
+    "targetValue": "(list (description \"Constitutional republic\"))", 
+    "utterance": "what type of government and economic system does the united states have?", 
+    "id": 3775, 
+    "result": [
+      "Constitutional republic"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/greenpeace", 
+    "targetValue": "(list (description Vancouver))", 
+    "utterance": "where was greenpeace an international environmental organization founded?", 
+    "id": 3776, 
+    "result": [
+      "Vancouver"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/george_washington", 
+    "targetValue": "(list (description \"Delegate to the Continental Congress\"))", 
+    "utterance": "what position did george washington serve in the constitutional convention?", 
+    "id": 3777, 
+    "result": [
+      "Delegate to the Continental Congress"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/france", 
+    "targetValue": "(list (description Normandy))", 
+    "utterance": "where did the massive allied invasion of northern france take place in june 1944?", 
+    "id": 3778, 
+    "result": [
+      "Normandy"
+    ]
+  }
+]

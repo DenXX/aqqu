@@ -1,0 +1,408 @@
+[
+  {
+    "url": "http://www.freebase.com/view/en/bigos", 
+    "targetValue": "(list (description Stew))", 
+    "utterance": "what are bigos?", 
+    "id": 1, 
+    "result": [
+      "Stew"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/james_t_kirk", 
+    "targetValue": "(list (description \"Jimmy Bennett\") (description \"Chris Pine\") (description \"William Shatner\"))", 
+    "utterance": "who played kirk?", 
+    "id": 2, 
+    "result": [
+      "Jimmy Bennett", 
+      "Chris Pine", 
+      "William Shatner"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/sergio_romo", 
+    "targetValue": "(list (description \"Baseball player\"))", 
+    "utterance": "what did romo do?", 
+    "id": 3, 
+    "result": [
+      "Baseball player"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/habiba_sarabi", 
+    "targetValue": "(list (description Physician))", 
+    "utterance": "what does sarabi?", 
+    "id": 4, 
+    "result": [
+      "Physician"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/richard_lynn_scott", 
+    "targetValue": "(list (description Investor) (description Businessperson) (description Politician) (description Lawyer))", 
+    "utterance": "who is rick scott?", 
+    "id": 5, 
+    "result": [
+      "Investor", 
+      "Businessperson", 
+      "Politician", 
+      "Lawyer"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/lyndon_b_johnson", 
+    "targetValue": "(list (description \"Lady Bird Johnson\"))", 
+    "utterance": "who did lbj marry?", 
+    "id": 6, 
+    "result": [
+      "Lady Bird Johnson"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/dan_white", 
+    "targetValue": "(list (description Firefighter) (description Politician) (description \"Police officer\"))", 
+    "utterance": "who was dan white?", 
+    "id": 7, 
+    "result": [
+      "Firefighter", 
+      "Politician", 
+      "Police officer"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/kenneth_parcell", 
+    "targetValue": "(list (description \"Jack McBrayer\"))", 
+    "utterance": "who plays kenneth?", 
+    "id": 8, 
+    "result": [
+      "Jack McBrayer"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/rutherford_b_hayes", 
+    "targetValue": "(list (description \"President of the United States\") (description \"Governor of Ohio\"))", 
+    "utterance": "what did hayes do?", 
+    "id": 9, 
+    "result": [
+      "President of the United States", 
+      "Governor of Ohio"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/general_motors", 
+    "targetValue": "(list (description Automobile))", 
+    "utterance": "what does gm make?", 
+    "id": 10, 
+    "result": [
+      "Automobile"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/i_dream_of_jeannie", 
+    "targetValue": "(list (description \"Barbara Eden\"))", 
+    "utterance": "who played jeannie?", 
+    "id": 11, 
+    "result": [
+      "Barbara Eden"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/barack_obama", 
+    "targetValue": "(list (description \"Saul Alinsky\") (description \"Nipsey Russell\"))", 
+    "utterance": "who inspired obama?", 
+    "id": 12, 
+    "result": [
+      "Saul Alinsky", 
+      "Nipsey Russell"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/new_france", 
+    "targetValue": "(list (description \"North America\"))", 
+    "utterance": "what is new france?", 
+    "id": 13, 
+    "result": [
+      "North America"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/arthur", 
+    "targetValue": "(list (description WGBH) (description \"Marc Brown\"))", 
+    "utterance": "who created arthur?", 
+    "id": 14, 
+    "result": [
+      "WGBH", 
+      "Marc Brown"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/lord_voldemort", 
+    "targetValue": "(list (description \"Richard Bremmer\") (description \"Frank Dillane\") (description \"Ralph Fiennes\") (description \"Hero Fiennes-Tiffin\") (description \"Christian Coulson\"))", 
+    "utterance": "who plays voldemort?", 
+    "id": 15, 
+    "result": [
+      "Richard Bremmer", 
+      "Frank Dillane", 
+      "Ralph Fiennes", 
+      "Hero Fiennes-Tiffin", 
+      "Christian Coulson"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/libya", 
+    "targetValue": "(list (description \"Mohammed Magariaf\"))", 
+    "utterance": "who is ruling libya?", 
+    "id": 16, 
+    "result": [
+      "Mohammed Magariaf"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/ku_klux_klan", 
+    "targetValue": "(list (description \"Albert Pike\") (description \"David Duke\") (description \"William Joseph Simmons\"))", 
+    "utterance": "who founded the kkk?", 
+    "id": 17, 
+    "result": [
+      "Albert Pike", 
+      "David Duke", 
+      "William Joseph Simmons"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/american_football_league", 
+    "targetValue": "(list (description \"Bud Adams\"))", 
+    "utterance": "who founded the afl?", 
+    "id": 18, 
+    "result": [
+      "Bud Adams"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/jimmy_savile", 
+    "targetValue": "(list (description Presenter))", 
+    "utterance": "who is jimmy savile?", 
+    "id": 19, 
+    "result": [
+      "Presenter"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/john_tyler", 
+    "targetValue": "(list (description \"President of the United States\"))", 
+    "utterance": "what was john tyler?", 
+    "id": 20, 
+    "result": [
+      "President of the United States"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/fa_cup", 
+    "targetValue": "(list (description \"Manchester United F.C.\"))", 
+    "utterance": "who won fa cup 1976?", 
+    "id": 21, 
+    "result": [
+      "Manchester United F.C."
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/fullmetal_alchemist", 
+    "targetValue": "(list (description \"FullMetal Alchemist\"))", 
+    "utterance": "what fma stands for?", 
+    "id": 22, 
+    "result": [
+      "FullMetal Alchemist"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/tupac_shakur", 
+    "targetValue": "(list (description \"Tupac 1994 assault\"))", 
+    "utterance": "when tupac was shot?", 
+    "id": 23, 
+    "result": [
+      "Tupac 1994 assault"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/kate_chopin", 
+    "targetValue": "(list (description Writer))", 
+    "utterance": "who was kate chopin?", 
+    "id": 24, 
+    "result": [
+      "Writer"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/annie", 
+    "targetValue": "(list (description \"Annie (1977 original Broadway cast)\"))", 
+    "utterance": "when did annie open?", 
+    "id": 25, 
+    "result": [
+      "Annie (1977 original Broadway cast)"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/richard_nixon", 
+    "targetValue": "(list (description \"Spiro Agnew\") (description \"Gerald Ford\"))", 
+    "utterance": "who was vp for nixon?", 
+    "id": 26, 
+    "result": [
+      "Spiro Agnew", 
+      "Gerald Ford"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/paris", 
+    "targetValue": "(list (description \"Mus\u00e9e Maillol\") (description \"Palace of Versailles\") (description \"Eiffel Tower\") (description \"\u00cele de la Cit\u00e9\") (description \"Caf\u00e9 Volpini\") (description \"Notre Dame de Paris\") (description \"Folies Berg\u00e8re\") (description \"Arc de Triomphe\") (description \"Basilica of the Sacr\u00e9 C\u0153ur\") (description \"Panth\u00e9on, Paris\"))", 
+    "utterance": "what do see in paris?", 
+    "id": 27, 
+    "result": [
+      "Mus\u00e9e Maillol", 
+      "Palace of Versailles", 
+      "Eiffel Tower", 
+      "\u00cele de la Cit\u00e9", 
+      "Caf\u00e9 Volpini", 
+      "Notre Dame de Paris", 
+      "Folies Berg\u00e8re", 
+      "Arc de Triomphe", 
+      "Basilica of the Sacr\u00e9 C\u0153ur", 
+      "Panth\u00e9on, Paris"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/kansas_city", 
+    "targetValue": "(list (description \"Platte County\"))", 
+    "utterance": "where is kansas city?", 
+    "id": 28, 
+    "result": [
+      "Platte County"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/ringo_starr", 
+    "targetValue": "(list (description \"Yellow Submarine\") (description \"Pinocchio Medley (\"Do You See the Noses Growing?\"): Desolation Theme / When You Wish Upon a Star\") (description \"Good Night\") (description \"I Shall Be Released\") (description \"Roll Over Beethoven\") (description \"Tommy's Holiday Camp\") (description \"Sweet Little Sixteen\") (description \"California Calling\") (description \"Honey Don't\") (description \"Don\u2019t Pass Me By\"))", 
+    "utterance": "what does ringo sing?", 
+    "id": 29, 
+    "result": [
+      "Yellow Submarine", 
+      "Pinocchio Medley (Do You See the Noses Growing?): Desolation Theme / When You Wish Upon a Star", 
+      "Good Night", 
+      "I Shall Be Released", 
+      "Roll Over Beethoven", 
+      "Tommy's Holiday Camp", 
+      "Sweet Little Sixteen", 
+      "California Calling", 
+      "Honey Don't", 
+      "Don\u2019t Pass Me By"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/michael_buble", 
+    "targetValue": "(list (description Singer) (description Actor) (description Singer-songwriter))", 
+    "utterance": "who is michael buble?", 
+    "id": 30, 
+    "result": [
+      "Singer", 
+      "Actor", 
+      "Singer-songwriter"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/google", 
+    "targetValue": "(list (description \"Larry Page\") (description \"Sergey Brin\"))", 
+    "utterance": "who owns google 2012?", 
+    "id": 31, 
+    "result": [
+      "Larry Page", 
+      "Sergey Brin"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/shakira", 
+    "targetValue": "(list (description Colombia))", 
+    "utterance": "where is shakira from?", 
+    "id": 32, 
+    "result": [
+      "Colombia"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/mali", 
+    "targetValue": "(list (description Africa) (description \"West Africa\"))", 
+    "utterance": "where is mali located?", 
+    "id": 33, 
+    "result": [
+      "Africa", 
+      "West Africa"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/john_connor", 
+    "targetValue": "(list (description \"Edward Furlong\") (description \"Christian Bale\") (description \"Nick Stahl\"))", 
+    "utterance": "who plays john connor?", 
+    "id": 34, 
+    "result": [
+      "Edward Furlong", 
+      "Christian Bale", 
+      "Nick Stahl"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/moira_mactaggert", 
+    "targetValue": "(list (description \"Olivia Williams\") (description \"Rose Byrne\"))", 
+    "utterance": "who is moira in x men?", 
+    "id": 35, 
+    "result": [
+      "Olivia Williams", 
+      "Rose Byrne"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/simon_birch", 
+    "targetValue": "(list (description \"Ian Michael Smith\"))", 
+    "utterance": "who plays simon birch?", 
+    "id": 36, 
+    "result": [
+      "Ian Michael Smith"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/paganism", 
+    "targetValue": "(list (description Odin))", 
+    "utterance": "who do pagans worship?", 
+    "id": 37, 
+    "result": [
+      "Odin"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/donna_noble", 
+    "targetValue": "(list (description \"Catherine Tate\"))", 
+    "utterance": "who plays donna noble?", 
+    "id": 38, 
+    "result": [
+      "Catherine Tate"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/mazda", 
+    "targetValue": "(list (description \"Ford Motor Company\"))", 
+    "utterance": "who owns mazda canada?", 
+    "id": 39, 
+    "result": [
+      "Ford Motor Company"
+    ]
+  }, 
+  {
+    "url": "http://www.freebase.com/view/en/lucille_ball", 
+    "targetValue": "(list (description Singer) (description Model) (description Comedian) (description \"Television Producer\") (description Actor))", 
+    "utterance": "what was lucille ball?", 
+    "id": 40, 
+    "result": [
+      "Singer", 
+      "Model", 
+      "Comedian", 
+      "Television Producer", 
+      "Actor"
+    ]
+  } 
+]
