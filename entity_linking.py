@@ -37,16 +37,22 @@ def main_parse():
 
 def main_entities():
     globals.read_configuration('config.cfg')
-    feature_generator = WebFeatureGenerator.init_from_config()
+    from text2kb.web_features import _read_serp_files
+    from text2kb.web_features import _read_entities
+    serp_files = globals.config.get('WebSearchFeatures', 'serp-files').split(',')
+    documents_files = globals.config.get('WebSearchFeatures', 'documents-files').split(',')
+    document_entities_file = globals.config.get('WebSearchFeatures', 'documents-entities-file')
+    serps = _read_serp_files(serp_files, documents_files)
+    doc_entities = _read_entities(document_entities_file)
     import operator
     while True:
         print "Please enter a question:"
         question = sys.stdin.readline().strip()
-        if question in feature_generator.question_serps:
-            docs = feature_generator.question_serps[question][:10]
+        if question in serps:
+            docs = serps[question][:10]
             entities = {}
             for doc in docs:
-                for entity in feature_generator._document_entities[doc.url]:
+                for entity in doc_entities[doc.url].itervalues():
                     e = (entity['mid'], entity['name'])
                     if e not in entities:
                         entities[e] = 0
@@ -116,4 +122,5 @@ def main_entity_link_text():
         print sorted(tokens.items(), key=operator.itemgetter(1), reverse=True)[:50]
 
 if __name__ == "__main__":
-    main()
+    # main_entities()  # For entity linking from SERP for a question
+    main_entity_link_text()  # For entity linking from arbitrary text

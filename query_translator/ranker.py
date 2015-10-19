@@ -190,6 +190,7 @@ class AccuModel(MLModel, Ranker):
         self.feature_extractor = FeatureExtractor(True,
                                                   False,
                                                   None,
+                                                  entity_features=True,
                                                   text_features=extract_text_features_ranking)
         if self.use_pruning:
             self.prune_feature_extractor = FeatureExtractor(True,

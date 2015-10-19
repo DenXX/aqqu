@@ -80,11 +80,11 @@ def print_candidates(test_queries):
     :return:
     """
     for test_query in test_queries:
-        if test_query.f1 != test_query.oracle_f1:
+        if test_query.f1 < 1.0:
             print test_query.utterance, test_query.f1, test_query.oracle_f1, test_query.oracle_position
             for rank, candidate in enumerate(test_query.eval_candidates):
-                print "\t" + str(rank) + "\t" + str(candidate.prediction) +\
-                      "\t" + candidate.query_candidate + "\t" + str(candidate.evaluation_result.f1)
+                print '\t' + str(rank) + '\t' + str(candidate.prediction) +\
+                      '\t' + str(candidate.query_candidate) + '\t' + str(candidate.evaluation_result.f1)
 
 
 def evaluate_scorer(test_queries, scorer_obj, print_ranked_candidates=False):

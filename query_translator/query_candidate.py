@@ -311,8 +311,13 @@ class QueryCandidate:
         return u','.join(self.get_entity_names()) +\
                u'[' + u','.join(self.get_relation_names()) + u']'
 
+    def __str__(self):
+        return ','.join(name.encode('utf-8') for name in self.get_entity_names()) +\
+               '[' + ','.join(name.encode('utf-8') for name in self.get_relation_names()) + '] ' +\
+               ','.join(token.token.encode('utf-8') for token in self.matched_tokens)
+
     def __repr__(self):
-        return unicode(self)
+        return str(self)
 
     def get_relation_names(self):
         return sorted([r.name for r in self.relations])

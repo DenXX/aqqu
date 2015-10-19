@@ -91,6 +91,7 @@ def _read_entities(document_entities_file):
         for entity in entities:
             doc_entities[entity['name'].lower()] = entity
     logger.info("Reading documents entities done!")
+    return documents_entities
 
 
 def answer_contains(answer_tokens, doc_tokens_set):
