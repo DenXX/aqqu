@@ -307,12 +307,10 @@ class WebFeatureGenerator:
 
     def __init__(self, serp_files, documents_files, entities_file, content_file):
         # Reading data if needed
-        if question_search_results is None:
-            _read_serp_files(serp_files, documents_files)
-        if documents_entities is None:
-            _read_entities(entities_file)
-        if documents_content is None:
-            _read_document_content(content_file)
+        self.serp_files = serp_files
+        self.documents_files = documents_files
+        self.entities_file = entities_file
+        self.content_file = content_file
 
     @staticmethod
     def init_from_config():
@@ -330,6 +328,14 @@ class WebFeatureGenerator:
         :return: A dictionary from feature name to feature value.
         """
         answers = candidate.get_results_text()
+
+        # Read search results data.
+        if question_search_results is None:
+            _read_serp_files(self.serp_files, self.documents_files)
+        if documents_entities is None:
+            _read_entities(self.entities_file)
+        if documents_content is None:
+            _read_document_content(self.content_file)
 
         if answers is None:
             logger.error("Answers is None!")
