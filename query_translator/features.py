@@ -113,6 +113,7 @@ class FeatureExtractor(object):
 
         # The number of literal entities.
         n_literal_entities = 0
+        n_literal_withexternal_entities = 0
         # The sum of surface_score * mention_length over all entity mentions.
         em_token_score = 0.0
         # A flag whether the candidate contains a mediator.
@@ -146,13 +147,15 @@ class FeatureExtractor(object):
         for em in candidate.matched_entities:
             # A threshold above which we consider the match a literal match.
             threshold = 0.8
-            n_entity_tokens += len(em.entity.tokens)
+            n_entity_tokens += len(em.entity.tokens) if not em.external_entity else 1
             if em.external_entity:
                 n_external_entities += 1
             external_count += em.external_entity_count
             if em.entity.perfect_match or em.entity.surface_score > threshold:
-                n_literal_entities += 1
-                literal_entities_length += len(em.entity.tokens)
+                if not em.external_entity:
+                    n_literal_entities += 1
+                    literal_entities_length += len(em.entity.tokens)
+                n_literal_withexternal_entities += 1
             em_surface_scores.append(em.entity.surface_score)
             em_score = em.entity.surface_score
             em_score *= len(em.entity.tokens)
@@ -232,6 +235,7 @@ class FeatureExtractor(object):
                 if external_count > 0:
                     features['avg_entity_external_count'] = math.log(external_count + 1) / n_entity_matches
                     features['sum_entity_external_count'] = math.log(external_count + 1)
+                    features['n_literal_withexternal_entities'] = n_literal_withexternal_entities
                 if n_external_entities > 0:
                     features['external_entities'] = n_external_entities
 
@@ -261,8 +265,6 @@ class FeatureExtractor(object):
         if self.relation_score_model:
             rank_score = self.relation_score_model.score(candidate)
             features['relation_score'] = rank_score.score
-
-        # TODO(denxx): I should probably check that the answers list isn't too long?..
         if self.generate_text_features:
             features.update(self.text_feature_generator.generate_features(candidate))
 
