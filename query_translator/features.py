@@ -230,8 +230,8 @@ class FeatureExtractor(object):
                                              + n_literal_relations),
                 })
                 if external_count > 0:
-                    features['avg_entity_external_count'] = external_count / n_entity_matches
-                    features['sum_entity_external_count'] = external_count
+                    features['avg_entity_external_count'] = math.log(external_count + 1) / n_entity_matches
+                    features['sum_entity_external_count'] = math.log(external_count + 1)
                 if n_external_entities > 0:
                     features['external_entities'] = n_external_entities
 
