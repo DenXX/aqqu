@@ -147,12 +147,12 @@ class FeatureExtractor(object):
         for em in candidate.matched_entities:
             # A threshold above which we consider the match a literal match.
             threshold = 0.8
-            n_entity_tokens += len(em.entity.tokens) if not em.external_entity else 1
-            if em.external_entity:
+            n_entity_tokens += len(em.entity.tokens) if not em.entity.external_entity else 1
+            if em.entity.external_entity:
                 n_external_entities += 1
-            external_count += em.external_entity_count
+            external_count += em.entity.external_entity_count
             if em.entity.perfect_match or em.entity.surface_score > threshold:
-                if not em.external_entity:
+                if not em.entity.external_entity:
                     n_literal_entities += 1
                     literal_entities_length += len(em.entity.tokens)
                 n_literal_withexternal_entities += 1
