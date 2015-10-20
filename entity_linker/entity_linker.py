@@ -146,6 +146,21 @@ class IdentifiedEntity():
         # as filter entities.
         self.use_as_seed_entity = use_as_seed_entity
 
+    def is_external_entity(self):
+        if hasattr(self, 'external_entity'):
+            return self.external_entity
+        return False
+
+    def get_external_entity_count(self):
+        if hasattr(self, 'external_entity_count'):
+            return self.external_entity_count
+        return 0
+
+    def can_use_as_seed_entity(self):
+        if hasattr(self, 'use_as_seed_entity'):
+            return self.use_as_seed_entity
+        return True
+
     def as_string(self):
         t = u','.join([u"%s" % t.token
                       for t in self.tokens])
@@ -566,6 +581,10 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
                 continue
             for index, entity in enumerate(self.doc_snippets_entities[doc.url]):
                 if entity['mid'] not in identified_entity_mids:
+                    # Skip entities that were linked only once.
+                    if entity['count'] == 1:
+                        continue
+
                     kb_entity = KBEntity(entity['name'], entity['mid'], entity['score'], None)
                     perfect_match = self._text_matches_main_name(
                         kb_entity, ' '.join(token.token for token in entity['matches'][0]))
