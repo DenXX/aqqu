@@ -18,100 +18,108 @@ SLIDING_WINDOW_SIZE = 20
 logger = logging.getLogger(__name__)
 
 # Global caches for search results, document contents and list of entities mentioned in the document.
-question_search_results = None
-documents_content = None
-documents_entities = None
-document_snippet_entities = None
+_question_search_results = None
+_documents_content = None
+_documents_entities = None
+_document_snippet_entities = None
 
 
-def _read_serp_files(serp_files, document_files):
-    global question_search_results
+def get_questions_serps():
+    global _question_search_results
 
-    logger.info("Reading search results...")
-    question_search_results = dict()
-    serps = []
-    for serp_file in serp_files:
-        with open(serp_file, 'r') as json_input:
-            serps.extend(json.load(json_input)['elems'])
+    if _question_search_results is None:
+        logger.info("Reading search results...")
+        serp_files = globals.config.get('WebSearchFeatures', 'serp-files').split(',')
+        document_files = globals.config.get('WebSearchFeatures', 'documents-files').split(',')
+        _question_search_results = dict()
+        serps = []
+        for serp_file in serp_files:
+            with open(serp_file, 'r') as json_input:
+                serps.extend(json.load(json_input)['elems'])
 
-    # Read a file with documents paths.
-    url2doc = dict()
-    for document_file in document_files:
-        with open(document_file, 'r') as json_input:
-            url2doc.update(dict((doc['url'], doc['contentDocument'])
-                                for doc in json.load(json_input)['elems']))
+        # Read a file with documents paths.
+        url2doc = dict()
+        for document_file in document_files:
+            with open(document_file, 'r') as json_input:
+                url2doc.update(dict((doc['url'], doc['contentDocument'])
+                                    for doc in json.load(json_input)['elems']))
 
-    for search_results in serps:
-        question = search_results['question']
-        question_serp = list()
-        question_search_results[question] = question_serp
-        for result in search_results['results']['elems']:
-            question_serp.append(
-                WebSearchResult(result['url'],
-                                result['title'],
-                                result['snippet'],
-                                url2doc[result['url']]))
-    logger.info("Reading search results done!")
-    return question_search_results
-
-
-def _read_document_content(document_content_file, return_parsed_tokens=False):
-    logger.info("Reading documents content...")
-    global documents_content
-    documents_content = dict()
-    with open(document_content_file, 'r') as content_input:
-        # Unpickle until the end of file is reached
-        index = 0
-        while True:
-            try:
-                url, content = pickle.load(content_input)
-                if not return_parsed_tokens:
-                    tokens = [(token.token.lower(), token.lemma.lower()) for token in content.tokens]
-                    documents_content[url] = tokens
-                else:
-                    documents_content[url] = content.tokens
-            except (EOFError, pickle.UnpicklingError):
-                break
-            index += 1
-            if index % 1000 == 0:
-                logger.info("Read " + str(index) + " documents...")
-    logger.info("Reading documents content done!")
-    return documents_content
+        for search_results in serps:
+            question = search_results['question']
+            question_serp = list()
+            _question_search_results[question] = question_serp
+            for result in search_results['results']['elems']:
+                question_serp.append(
+                    WebSearchResult(result['url'],
+                                    result['title'],
+                                    result['snippet'],
+                                    url2doc[result['url']]))
+        logger.info("Reading search results done!")
+    return _question_search_results
 
 
-def _read_entities(document_entities_file):
-    global documents_entities
-    if documents_entities is None:
+def get_documents_content_dict(return_parsed_tokens=False):
+    if _documents_content is None:
+        logger.info("Reading documents content...")
+        global _documents_content
+        document_content_file = globals.config.get('WebSearchFeatures', 'documents-content-file')
+
+        _documents_content = dict()
+        with open(document_content_file, 'r') as content_input:
+            # Unpickle until the end of file is reached
+            index = 0
+            while True:
+                try:
+                    url, content = pickle.load(content_input)
+                    if not return_parsed_tokens:
+                        tokens = [(token.token.lower(), token.lemma.lower()) for token in content.tokens]
+                        _documents_content[url] = tokens
+                    else:
+                        _documents_content[url] = content.tokens
+                except (EOFError, pickle.UnpicklingError):
+                    break
+                index += 1
+                if index % 1000 == 0:
+                    logger.info("Read " + str(index) + " documents...")
+        logger.info("Reading documents content done!")
+    return _documents_content
+
+
+def get_documents_entities():
+    global _documents_entities
+    if _documents_entities is None:
         logger.info("Reading documents entities...")
-        documents_entities = dict()
+        document_entities_file = globals.config.get('WebSearchFeatures', 'documents-entities-file')
+        _documents_entities = dict()
         with open(document_entities_file) as entities_file:
             url_entities = pickle.load(entities_file)
         for url, entities in url_entities.iteritems():
             doc_entities = dict()
-            documents_entities[url] = doc_entities
+            _documents_entities[url] = doc_entities
             for entity in entities:
                 doc_entities[entity['name'].lower()] = entity
         logger.info("Reading documents entities done!")
-    return documents_entities
+    return _documents_entities
 
 
-def _read_document_snippet_entities(document_snippet_entities_file):
-    global document_snippet_entities
-    if document_snippet_entities is None:
+def get_documents_snippet_entities():
+    global _document_snippet_entities
+    if _document_snippet_entities is None:
+        document_snippet_entities_file = globals.config.get('WebSearchFeatures', 'document-snippet-entities')
         logger.info("Reading documents snippet entities...")
         with open(document_snippet_entities_file) as entities_file:
-            document_snippet_entities = pickle.load(entities_file)
+            _document_snippet_entities = pickle.load(entities_file)
         logger.info("Reading documents snippet entities done!")
-    return document_snippet_entities
+    return _document_snippet_entities
 
 
-def answer_contains(answer_tokens, doc_tokens_set):
+def _answer_contains(answer_tokens, doc_tokens_set):
     if len(answer_tokens) == 0:
         return 0.0
     return sum(1.0 for answer_token in answer_tokens if answer_token in doc_tokens_set) / len(answer_tokens)
 
 
-def compute_tokenset_similarity(question_tokenset, answer_tokenset):
+def _compute_tokenset_similarity(question_tokenset, answer_tokenset):
     """
     Computes the cosine similarity between two sets of tokens.
     :param question_tokens:
@@ -129,7 +137,7 @@ def compute_tokenset_similarity(question_tokenset, answer_tokenset):
     return 1.0 * res / (sqrt(len(question_tokenset))) / sqrt(sum)
 
 
-def compute_sliding_window_score(matched_positions, token_to_pos, lemma_to_pos, answer_tokens):
+def _compute_sliding_window_score(matched_positions, token_to_pos, lemma_to_pos, answer_tokens):
     total_token_counts = dict((token, len(pos)) for token, pos in token_to_pos.iteritems())
     total_token_counts.update(dict((lemma, len(pos)) for lemma, pos in lemma_to_pos.iteritems()))
     begin = 0
@@ -173,7 +181,7 @@ def compute_sliding_window_score(matched_positions, token_to_pos, lemma_to_pos, 
     return score, best_beg, best_end
 
 
-def compute_min_distance_question_answer(question_tokens_positions, answer_tokens_positions, document_length):
+def _compute_min_distance_question_answer(question_tokens_positions, answer_tokens_positions, document_length):
     INF = 1000000
     diff = INF
     question_tokens_pos = set(map(lambda x: x[0], question_tokens_positions))
@@ -216,17 +224,17 @@ class WebSearchResult:
         """
         :return: A list of mentioned entities.
         """
-        global documents_entities
-        if documents_entities and self.url in documents_entities:
-            return documents_entities[self.url]
+        global _documents_entities
+        if _documents_entities and self.url in _documents_entities:
+            return _documents_entities[self.url]
         return None
 
     def parsed_content(self):
         """
         :return: Parsed content of the current document
         """
-        if documents_content is not None and self.url in documents_content:
-            return documents_content[self.url]
+        if _documents_content is not None and self.url in _documents_content:
+            return _documents_content[self.url]
         # TODO(denxx): Here we need to parse, but to parse we need parser. Should make a global parser.
         return None
 
@@ -268,6 +276,12 @@ class WebSearchResult:
         return self.snippet_tokens
 
     def get_snippet_entities(self):
+        doc_snippet_entities = get_documents_snippet_entities()
+        if self.url in doc_snippet_entities:
+            return doc_snippet_entities[self.url]
+
+        logger.warning("Didn't find cached document snippet entities.")
+        # If we didn't find snippet entities in cache, use entity linker.
         if self.snippet_entities is None:
             entity_linker = globals.get_entity_linker()
             self.snippet_entities = dict(
@@ -305,21 +319,12 @@ class WebFeatureGenerator:
     Generates candidate features based on web search results.
     """
 
-    def __init__(self, serp_files, documents_files, entities_file, content_file):
-        # Reading data if needed
-        self.serp_files = serp_files
-        self.documents_files = documents_files
-        self.entities_file = entities_file
-        self.content_file = content_file
+    def __init__(self):
+        self.question_search_results = None
 
     @staticmethod
     def init_from_config():
-        config_options = globals.config
-        serp_files = config_options.get('WebSearchFeatures', 'serp-files').split(',')
-        documents_files = config_options.get('WebSearchFeatures', 'documents-files').split(',')
-        entities_file = config_options.get('WebSearchFeatures', 'documents-entities-file')
-        content_file = config_options.get('WebSearchFeatures', 'documents-content-file')
-        return WebFeatureGenerator(serp_files, documents_files, entities_file, content_file)
+        return WebFeatureGenerator()
 
     def generate_features(self, candidate):
         """
@@ -330,12 +335,8 @@ class WebFeatureGenerator:
         answers = candidate.get_results_text()
 
         # Read search results data.
-        if question_search_results is None:
-            _read_serp_files(self.serp_files, self.documents_files)
-        if documents_entities is None:
-            _read_entities(self.entities_file)
-        if documents_content is None:
-            _read_document_content(self.content_file)
+        if self.question_search_results is None:
+            self.question_search_results = get_questions_serps()
 
         if answers is None:
             logger.error("Answers is None!")
@@ -348,7 +349,7 @@ class WebFeatureGenerator:
         question = candidate.query.original_query
 
         # If we don't have anything for the question...
-        if question not in question_search_results:
+        if question not in self.question_search_results:
             logger.warning("No documents found for question: " + question)
             return dict()
 
@@ -374,7 +375,7 @@ class WebFeatureGenerator:
         for i in xrange(len(answers)):
             answer_neighbourhood.append(set())
 
-        for rank, doc in enumerate(question_search_results[question][:globals.SEARCH_RESULTS_TOPN]):
+        for rank, doc in enumerate(self.question_search_results[question][:globals.SEARCH_RESULTS_TOPN]):
             doc_content = doc.parsed_content()
             doc_tokens = doc.get_content_tokens_set()
             doc_entities = doc.mentioned_entities()
@@ -402,11 +403,11 @@ class WebFeatureGenerator:
 
             token_to_pos, lemma_to_pos = doc.get_token_to_positions_map()
             for i, answer_tokens in enumerate(answers_tokens):
-                if answer_contains(answer_tokens, snippets_tokens) > 0.7:
+                if _answer_contains(answer_tokens, snippets_tokens) > 0.7:
                     answer_occurances_snippet_text[i] += 1
 
                 if doc_content is not None:
-                    if answer_contains(answer_tokens, doc_tokens) > 0.7:
+                    if _answer_contains(answer_tokens, doc_tokens) > 0.7:
                         answer_doc_occurances_text[i] += 1
 
                     # Get a set of positions of answer tokens in the target document.
@@ -420,12 +421,12 @@ class WebFeatureGenerator:
                                                     for pos in lemma_to_pos[question_lemma])
                     matched_positions = sorted(answer_tokens_positions.union(question_tokens_positions),
                                                key=operator.itemgetter(0))
-                    score, beg, end = compute_sliding_window_score(matched_positions,
+                    score, beg, end = _compute_sliding_window_score(matched_positions,
                                                                    token_to_pos,
                                                                    lemma_to_pos,
                                                                    answer_tokens)
                     sliding_window_score[i] += score
-                    min_distance_question_answer_token[i] += compute_min_distance_question_answer(
+                    min_distance_question_answer_token[i] += _compute_min_distance_question_answer(
                         question_tokens_positions, answer_tokens_positions, len(doc_content))
 
                     # Get a set of actual tokens in the neighbourhood of answer tokens.
@@ -435,7 +436,7 @@ class WebFeatureGenerator:
                                                                                 min(len(doc_content),
                                                                                     pos + WINDOW_SIZE + 1))
                                                           if neighbor not in answer_tokens_positions])
-                    answer_context_question_similarity[i] += compute_tokenset_similarity(question_tokens,
+                    answer_context_question_similarity[i] += _compute_tokenset_similarity(question_tokens,
                                                                                          answer_tokens_neighborhood)
 
         return {

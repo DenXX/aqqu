@@ -4,13 +4,10 @@ from text2kb.web_features import WebFeatureGenerator
 __author__ = 'dsavenk'
 
 import cPickle as pickle
-import functools
 import globals
 import logging
 from datetime import datetime
-import multiprocessing
 import sys
-from entity_linker.entity_linker import EntityLinker
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s '
                            ': %(module)s : %(message)s',
@@ -37,13 +34,10 @@ def main_parse():
 
 def main_entities():
     globals.read_configuration('config.cfg')
-    from text2kb.web_features import _read_serp_files
-    from text2kb.web_features import _read_entities
-    serp_files = globals.config.get('WebSearchFeatures', 'serp-files').split(',')
-    documents_files = globals.config.get('WebSearchFeatures', 'documents-files').split(',')
-    document_entities_file = globals.config.get('WebSearchFeatures', 'documents-entities-file')
-    serps = _read_serp_files(serp_files, documents_files)
-    doc_entities = _read_entities(document_entities_file)
+    from text2kb.web_features import get_questions_serps
+    from text2kb.web_features import get_documents_entities
+    serps = get_questions_serps()
+    doc_entities = get_documents_entities()
     import operator
     while True:
         print "Please enter a question:"
@@ -66,14 +60,11 @@ def main():
     globals.read_configuration('config.cfg')
     entity_linker = globals.get_entity_linker()
     config_options = globals.config
-    serp_files = config_options.get('WebSearchFeatures', 'serp-files').split(',')
-    documents_files = config_options.get('WebSearchFeatures', 'documents-files').split(',')
-    content_file = config_options.get('WebSearchFeatures', 'documents-content-file')
 
     doc_entities = dict()
-    from text2kb.web_features import _read_serp_files, _read_document_content
-    question_search_results = _read_serp_files(serp_files, documents_files)
-    documents_content = _read_document_content(content_file, return_parsed_tokens=True)
+    from text2kb.web_features import get_questions_serps, get_documents_content_dict
+    question_search_results = get_questions_serps()
+    documents_content = get_documents_content_dict(return_parsed_tokens=True)
     index = 0
     for serp in question_search_results.itervalues():
         for doc in serp[:10]:
@@ -91,18 +82,18 @@ def main_entity_link_text():
     globals.read_configuration('config.cfg')
     entity_linker = globals.get_entity_linker()
     parser = globals.get_parser()
-    from text2kb.web_features import _read_serp_files
-    serp_files = globals.config.get('WebSearchFeatures', 'serp-files').split(',')
-    documents_files = globals.config.get('WebSearchFeatures', 'documents-files').split(',')
-    question_search_results = _read_serp_files(serp_files, documents_files)
+    from text2kb.web_features import get_questions_serps
+    question_search_results = get_questions_serps()
+    globals.logger.setLevel("DEBUG")
     import operator
     while True:
         print "Please enter some text: "
         text = sys.stdin.readline().strip().decode('utf-8')
         tokens = parser.parse(text).tokens
-        print entity_linker.identify_entities_in_document(tokens, max_token_window=5)
+        print "Entities:", entity_linker.identify_entities_in_document(tokens, max_token_window=5)
         entities = {}
         tokens = {}
+
         if text in question_search_results:
             for doc in question_search_results[text][:10]:
                 print doc
@@ -119,16 +110,14 @@ def main_entity_link_text():
                     else:
                         entities[entity['mid']]['count'] += entity['count']
         print sorted(entities.values(), key=operator.itemgetter('count'), reverse=True)[:50]
-        print sorted(tokens.items(), key=operator.itemgetter(1), reverse=True)[:50]
+        # print sorted(tokens.items(), key=operator.itemgetter(1), reverse=True)[:50]
 
 
 def entity_link_snippets():
     globals.read_configuration('config.cfg')
     entity_linker = globals.get_entity_linker()
-    from text2kb.web_features import _read_serp_files
-    serp_files = globals.config.get('WebSearchFeatures', 'serp-files').split(',')
-    documents_files = globals.config.get('WebSearchFeatures', 'documents-files').split(',')
-    question_search_results = _read_serp_files(serp_files, documents_files)
+    from text2kb.web_features import get_questions_serps
+    question_search_results = get_questions_serps()
     doc_snippet_entities = dict()
     for index, serp in enumerate(question_search_results.itervalues()):
         for doc in serp[:globals.SEARCH_RESULTS_TOPN]:
@@ -158,6 +147,6 @@ def test_new_entity_linker():
 
 if __name__ == "__main__":
     # main_entities()  # For entity linking from SERP for a question
-    # main_entity_link_text()  # For entity linking from arbitrary text
+    main_entity_link_text()  # For entity linking from arbitrary text
     # entity_link_snippets()
-    test_new_entity_linker()
+    # test_new_entity_linker()

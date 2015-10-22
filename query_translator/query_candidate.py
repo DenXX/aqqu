@@ -342,7 +342,7 @@ class QueryCandidate:
         del d['sparql_backend']
         del d['extension_history']
         del d['features']
-        del d['feture_extractor']
+        del d['feature_extractor']
         return d
 
     def __setstate__(self, d):

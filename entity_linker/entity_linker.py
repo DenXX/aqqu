@@ -324,11 +324,14 @@ class EntityLinker:
         for start in range(n_tokens):
             for end in range(start + 1, n_tokens + 1 if max_token_window == -1 else start + max_token_window + 1):
                 entity_tokens = tokens[start:end]
-                if not self.is_entity_occurrence(tokens, start, end):
+                entity_occurence = self.is_entity_occurrence(tokens, start, end)
+                logger.debug("TOKENS: " + ' '.join(token.token+"/"+token.pos for token in entity_tokens) + "\t" + str(entity_occurence))
+                if not entity_occurence:
                     continue
                 entity_str = ' '.join([t.token for t in entity_tokens])
                 logger.debug(u"Checking if '{0}' is an entity.".format(entity_str))
                 entities = self.surface_index.get_entities_for_surface(entity_str)
+                logger.debug(u"Found {0} entities.".format(len(entities)))
                 # No suggestions.
                 if len(entities) == 0:
                     continue
@@ -501,6 +504,7 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
     # How many entities found in search results is allowed to use to build new candidate
     # queries. The rest of the entities can be used to build type-3 queries.
     TOP_ENTITIES_AS_SEEDS = 3
+    TOPN_ENTITIES = 10
 
     def __init__(self, surface_index, max_entities_per_tokens=4, use_web_results=True, search_results=None,
                  doc_snippets_entities=None):
@@ -525,12 +529,9 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
         question_search_results = dict()
         doc_snippets_entities = dict()
         if use_web_results:
-            from text2kb.web_features import _read_serp_files, _read_document_snippet_entities
-            serp_files = globals.config.get('WebSearchFeatures', 'serp-files').split(',')
-            documents_files = globals.config.get('WebSearchFeatures', 'documents-files').split(',')
-            document_snippet_entities_file = globals.config.get('WebSearchFeatures', 'document-snippet-entities')
-            question_search_results = _read_serp_files(serp_files, documents_files)
-            doc_snippets_entities = _read_document_snippet_entities(document_snippet_entities_file)
+            from text2kb.web_features import get_questions_serps, get_documents_snippet_entities
+            question_search_results = get_questions_serps()
+            doc_snippets_entities = get_documents_snippet_entities()
         return WebSearchResultsExtenderEntityLinker(surface_index,
                                                     max_entities_p_token,
                                                     use_web_results,
@@ -579,7 +580,9 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
             if doc.url not in self.doc_snippets_entities:
                 logger.warning("Document %s not found in document snippets entities dictionary!" % doc.url)
                 continue
-            for index, entity in enumerate(self.doc_snippets_entities[doc.url]):
+
+            for index, entity in enumerate(
+                    self.doc_snippets_entities[doc.url][:WebSearchResultsExtenderEntityLinker.TOPN_ENTITIES]):
                 if entity['mid'] not in identified_entity_mids:
                     # Skip entities that were linked only once.
                     if entity['count'] == 1:
