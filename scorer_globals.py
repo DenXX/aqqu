@@ -142,9 +142,9 @@ def init():
           'webquestions.split.dev.json'),
          ('webquestionstrain_externalentities',
           'evaluation-data/'
-          'webquestions.train.copy.json'),
+          'webquestions.train.copy2.json'),
          ('webquestionstest_externalentities',
           'evaluation-data/'
-          'webquestions.test.copy.json'),
+          'webquestions.test.copy2.json'),
          ]
     )

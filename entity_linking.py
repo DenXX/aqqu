@@ -147,6 +147,10 @@ def test_new_entity_linker():
 
 if __name__ == "__main__":
     # main_entities()  # For entity linking from SERP for a question
-    main_entity_link_text()  # For entity linking from arbitrary text
+    # main_entity_link_text()  # For entity linking from arbitrary text
     # entity_link_snippets()
     # test_new_entity_linker()
+    from entity_linker.entity_linker import KBEntity
+    globals.read_configuration('config.cfg')
+    entity = KBEntity("Daniil Kharms", "m.03lp80", 1.0, None)
+    print entity.get_description()

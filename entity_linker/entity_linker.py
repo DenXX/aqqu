@@ -39,6 +39,7 @@ class Entity(object):
 
 class KBEntity(Entity):
     """A KB entity."""
+    _entity_descriptions = None
 
     def __init__(self, name, identifier, score, aliases):
         Entity.__init__(self, name)
@@ -48,6 +49,16 @@ class KBEntity(Entity):
         self.score = score
         # The entity's aliases.
         self.aliases = aliases
+
+    def get_description(self):
+        """
+        Returns the text of the description of the entity.
+        :return: The text of the description of the entity.
+        """
+        if KBEntity._entity_descriptions is None:
+            KBEntity._read_descriptions()
+        return KBEntity._entity_descriptions[self.id] \
+            if self.id in KBEntity._entity_descriptions else ""
 
     def sparql_name(self):
         return self.id
@@ -60,6 +71,27 @@ class KBEntity(Entity):
 
     def __eq__(self, other):
         return self.name == other.name
+
+    @staticmethod
+    def _read_descriptions():
+        if KBEntity._entity_descriptions is None:
+            import globals
+            import gzip
+            descriptions_file = globals.config.get('EntityLinker', 'entity-descriptions-file')
+            logger.info("Reading entity descriptions...")
+            with gzip.open(descriptions_file, 'r') as input_file:
+                KBEntity._entity_descriptions = dict()
+                for index, line in enumerate(input_file):
+                    line = line.decode('utf-8').strip().split('\t')
+                    if len(line) > 2:
+                        mid = line[0].split('/')[-1][:-1]
+                        description = line[2]
+                        pos_left = description.find("\"")
+                        pos_right = description.rfind("\"")
+                        if pos_left != -1 and pos_right != -1:
+                            description = description[pos_left + 1: pos_right]
+                        KBEntity._entity_descriptions[mid] = description
+            logger.info("Done reading entity descriptions.")
 
 
 class Value(Entity):
@@ -504,7 +536,7 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
     # How many entities found in search results is allowed to use to build new candidate
     # queries. The rest of the entities can be used to build type-3 queries.
     TOP_ENTITIES_AS_SEEDS = 3
-    TOPN_ENTITIES = 10
+    TOPN_ENTITIES = 1
 
     def __init__(self, surface_index, max_entities_per_tokens=4, use_web_results=True, search_results=None,
                  doc_snippets_entities=None):
@@ -607,4 +639,5 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
 
 
 if __name__ == '__main__':
-    pass
+    entity = KBEntity("Daniil Kharms", u"m.03lp80", 1.0, None)
+    print entity.get_description()
