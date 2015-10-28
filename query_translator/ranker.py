@@ -1097,7 +1097,7 @@ def construct_examples(queries, f_extractor):
                 labels.append(0)
     return features, labels
 
-
+# This method isn't used in the code.
 def construct_ngram_examples(queries, f_extractor):
     """Construct training examples from candidates.
 

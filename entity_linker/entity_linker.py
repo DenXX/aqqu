@@ -55,10 +55,14 @@ class KBEntity(Entity):
         Returns the text of the description of the entity.
         :return: The text of the description of the entity.
         """
+        KBEntity.get_entity_description(self.id)
+
+    @staticmethod
+    def get_entity_description(entity_id):
         if KBEntity._entity_descriptions is None:
             KBEntity._read_descriptions()
-        return KBEntity._entity_descriptions[self.id] \
-            if self.id in KBEntity._entity_descriptions else ""
+        return KBEntity._entity_descriptions[entity_id] \
+            if entity_id in KBEntity._entity_descriptions else ""
 
     def sparql_name(self):
         return self.id

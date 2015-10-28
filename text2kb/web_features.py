@@ -8,7 +8,7 @@ import operator
 import globals
 import os
 from query_translator.features import get_query_text_tokens
-from collections import Counter
+from collections import Counter, deque
 
 __author__ = 'dsavenk'
 
@@ -58,6 +58,8 @@ def get_questions_serps():
     return _question_search_results
 
 
+# TODO(denxx): the parameter return_parsed_tokens shouldn't be here. The result is cached, so I can't call with
+# different params.
 def get_documents_content_dict(return_parsed_tokens=False):
     if _documents_content is None:
         logger.info("Reading documents content...")
@@ -86,6 +88,10 @@ def get_documents_content_dict(return_parsed_tokens=False):
 
 
 def get_documents_entities():
+    """
+    :return: Returns a dictionary from document url to the dictionary of mentioned entities. Each element of the list
+    is a dictionary with fields name, mid, surface_score, score, positions, count.
+    """
     global _documents_entities
     if _documents_entities is None:
         logger.info("Reading documents entities...")
@@ -222,19 +228,20 @@ class WebSearchResult:
 
     def mentioned_entities(self):
         """
-        :return: A list of mentioned entities.
+        :return: A dictionary of mentioned entities (name -> entity).
         """
-        global _documents_entities
-        if _documents_entities and self.url in _documents_entities:
-            return _documents_entities[self.url]
+        documents_entities = get_documents_entities()
+        if self.url in documents_entities:
+            return documents_entities[self.url]
         return None
 
     def parsed_content(self):
         """
         :return: Parsed content of the current document
         """
-        if _documents_content is not None and self.url in _documents_content:
-            return _documents_content[self.url]
+        documents_content = get_documents_content_dict()
+        if self.url in documents_content:
+            return documents_content[self.url]
         # TODO(denxx): Here we need to parse, but to parse we need parser. Should make a global parser.
         return None
 
@@ -326,7 +333,169 @@ class WebFeatureGenerator:
     def init_from_config():
         return WebFeatureGenerator()
 
+    @staticmethod
+    def get_answer_occurrence_by_entity(document_entities, answer_entity):
+        """
+        Returns a list of positions of occurences of the provided answer_entity in the document.
+        :param document_entities: A dictionary (name->entity) of entities mentioned in the document.
+        :param answer_entity: The name of the entity to search for.
+        :return: Returns a list of positions of occurences of the provided answer_entity in the document.
+        The method returns an empty list if the entity wasn't found.
+        """
+        return document_entities[answer_entity] if answer_entity in document_entities else []
+
+    @staticmethod
+    def get_answer_occurrence_by_name(document_token2pos, answer_tokens, window_size=3, tokens_fraction=0.7):
+        """
+        Returns the list of positions of occurences of the answer entity in the document.
+        :param document_token2pos: A dictionary from token to positions where it occurs in the document.
+        :param answer_tokens: Tokens of the answer entity.
+        :return: Returns the list of positions of occurences or an empty list.
+        """
+        res = []
+        answer_token_positions = [(pos, index) for token in answer_tokens
+                                  for index, pos in enumerate(document_token2pos[token]
+                                                              if token in document_token2pos else [])]
+        answer_token_positions.sort(operator.itemgetter(0))
+        current_window = deque()
+        token_window_counts = [0, ] * len(answer_tokens)
+        for pos in answer_token_positions:
+            token_window_counts[pos[1]] += 1
+            current_window.append(pos)
+            while len(current_window) > 0 and current_window[0][0] <= pos[0] - len(answer_tokens) - window_size:
+                token_window_counts[current_window[0][1]] -= 1
+                current_window.popleft()
+            if sum(1 for token_window_count in token_window_counts if token_window_count > 0) > \
+                    tokens_fraction * len(answer_tokens):
+                res.append((pos[0][0], pos[-1][0]))
+        return res
+
+    @staticmethod
+    def get_qproximity_score(question_tokens_positions, answer_entity_positions, default_distance = 0):
+        min_scores = []
+        avg_scores = []
+        for pos in answer_entity_positions:
+            pos = (pos[0] + pos[1]) / 2
+            scores = []
+            for question_token_positions in question_tokens_positions:
+                # Check if the list is empty
+                if not question_token_positions:
+                    l = 0
+                    r = len(question_token_positions)
+                    while l < r:
+                        m = (l + r) / 2
+                        if question_token_positions[m] < pos:
+                            l = m + 1
+                        else:
+                            r = m
+                scores.append(min(abs(question_token_positions[i] - pos)
+                                  for i in xrange(l - 1, l + 1) if 0 <= i < len(question_token_positions)))
+            if len(scores) > 0:
+                min_scores.append(min(scores))
+                avg_scores.append(1.0 * sum(scores) / len(scores))
+        return min(min_scores) if len(min_scores) > 0 else default_distance,\
+               min(avg_scores) if len(avg_scores) > 0 else default_distance
+
+
+    def generate_description_features(self):
+        return dict()
+
     def generate_features(self, candidate):
+        answers = candidate.get_results_text
+
+        # Skip empty and extra-long answers.
+        if len(answers) == 0 or len(answers) > 10:
+            return dict()
+
+        stopwords = globals.get_stopwords()
+        answers_lower_tokens = [filter(lambda token: token not in stopwords, answer.lower().split())
+                                for answer in answers]
+
+        question_search_results = get_questions_serps()
+        question_text = candidate.query.original_query
+        if question_text not in question_search_results:
+            logger.warning("No search results found for the question % s" % question_text)
+            return dict()
+        question_tokens = set(filter(lambda token: token not in stopwords and token != 'STRTS' and token != 'ENTITY',
+                                     get_query_text_tokens(candidate)))
+        question_entities = [entity.entity.name.lower() for entity in candidate.matched_entities]
+
+        answer_occurrences_text = []
+        answer_occurrences_entity = []
+        answer_snippet_occurrences_entity = []
+        answer_doc_count_text = []
+        answer_doc_count_entity = []
+        answer_qproximity_score_text = []
+        answer_qproximity_score_entity = []
+
+        for i in xrange(answers):
+            answer_occurrences_text.append([])
+            answer_occurrences_entity.append([])
+            answer_snippet_occurrences_entity.append([])
+            answer_doc_count_text.append([])
+            answer_doc_count_entity.append([])
+            answer_qproximity_score_text.append([])
+            answer_qproximity_score_entity.append([])
+
+        for document in question_search_results[question_text][:globals.SEARCH_RESULTS_TOPN]:
+            doc_entities = document.mentioned_entities()
+            doc_token2pos, doc_lemma2pos = document.get_token_to_positions_map()
+            doc_snippet_entities = document.get_snippet_entities()
+            question_tokens_locations = [doc_token2pos[question_token] if question_token in doc_token2pos else []
+                                         for question_token in question_tokens]
+            question_tokens_locations.extend(sorted([(position[0] + position[1]) / 2
+                                                     for question_entity in question_entities
+                                                     if question_entity in doc_entities]
+                                                    for position in doc_entities[question_entities].positions))
+
+            for answer_index in xrange(len(answers)):
+                answer_text_positions = WebFeatureGenerator.get_answer_occurrence_by_name(doc_token2pos,
+                                                                                          answers_lower_tokens)
+                answer_entity_positions = WebFeatureGenerator.get_answer_occurrence_by_entity(
+                    doc_entities, answers[answer_index].lower())
+                answer_entity_snippet_positions = WebFeatureGenerator.get_answer_occurrence_by_entity(
+                    doc_snippet_entities, answers[answer_index].lower())
+
+                answer_occurrences_text[answer_index].append(len(answer_text_positions))
+                answer_occurrences_entity[answer_index].append(len(answer_entity_positions))
+                answer_snippet_occurrences_entity[answer_index].append(len(answer_entity_snippet_positions))
+                answer_doc_count_text[answer_index].append(1 if len(answer_text_positions) > 0 else 0)
+                answer_doc_count_entity[answer_index].append(1 if len(answer_entity_positions) > 0 else 0)
+                answer_qproximity_score_text[answer_index].append(WebFeatureGenerator.get_qproximity_score(
+                    question_tokens_locations, answer_text_positions))
+                answer_qproximity_score_entity[answer_index].append(WebFeatureGenerator.get_qproximity_score(
+                    question_tokens_locations, answer_entity_positions))
+
+        features = dict()
+        features.update(self.get_doc_aggregated_features(answer_occurrences_text,
+                                                         "web_search:answer_occurrences_by_text"))
+        features.update(self.get_doc_aggregated_features(answer_occurrences_entity,
+                                                         "web_search:answer_occurrences_by_entity"))
+        features.update(self.get_doc_aggregated_features(answer_snippet_occurrences_entity,
+                                                         "web_search:answer_snippet_occurrences_by_entity"))
+        features.update(self.get_doc_aggregated_features(answer_doc_count_text,
+                                                         "web_search:answer_doc_count_by_text"))
+        features.update(self.get_doc_aggregated_features(answer_doc_count_entity,
+                                                         "web_search:answer_doc_count_by_entity"))
+        features.update(self.get_doc_aggregated_features(answer_qproximity_score_text,
+                                                         "web_search:answer_qproximity_by_text"))
+        features.update(self.get_doc_aggregated_features(answer_qproximity_score_entity,
+                                                         "web_search:answer_qproximity_by_entity"))
+        features.update(self.generate_description_features())
+        return features
+
+    def get_doc_aggregated_features(self, answer_doc_scores, feature_prefix):
+        if not answer_doc_scores:
+            return dict()
+
+        mult = log(len(answer_doc_scores) + 1) / len(answer_doc_scores)
+        return {
+            feature_prefix + "_top1": sum(answer[0] for answer in answer_doc_scores) * mult,
+            feature_prefix + "_total": sum(sum(answer) for answer in answer_doc_scores) * mult,
+            feature_prefix: sum(1.0 * sum(answer) / len(answer) for answer in answer_doc_scores) * mult,
+        }
+
+    def generate_features_old(self, candidate):
         """
         Generates features for the candidate answer bases on search results documents.
         :param candidate: Candidate answer to generate features for
@@ -422,9 +591,9 @@ class WebFeatureGenerator:
                     matched_positions = sorted(answer_tokens_positions.union(question_tokens_positions),
                                                key=operator.itemgetter(0))
                     score, beg, end = _compute_sliding_window_score(matched_positions,
-                                                                   token_to_pos,
-                                                                   lemma_to_pos,
-                                                                   answer_tokens)
+                                                                    token_to_pos,
+                                                                    lemma_to_pos,
+                                                                    answer_tokens)
                     sliding_window_score[i] += score
                     min_distance_question_answer_token[i] += _compute_min_distance_question_answer(
                         question_tokens_positions, answer_tokens_positions, len(doc_content))
@@ -437,7 +606,7 @@ class WebFeatureGenerator:
                                                                                     pos + WINDOW_SIZE + 1))
                                                           if neighbor not in answer_tokens_positions])
                     answer_context_question_similarity[i] += _compute_tokenset_similarity(question_tokens,
-                                                                                         answer_tokens_neighborhood)
+                                                                                          answer_tokens_neighborhood)
 
         return {
             'web_results:answer_entity_occurances': 1.0 * sum(answer_occurances_entity) / len(answers),
@@ -461,3 +630,4 @@ if __name__ == "__main__":
     globals.read_configuration('config.cfg')
     feature_generator = WebFeatureGenerator.init_from_config()
     print feature_generator
+
