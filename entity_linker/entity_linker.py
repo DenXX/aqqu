@@ -40,6 +40,7 @@ class Entity(object):
 class KBEntity(Entity):
     """A KB entity."""
     _entity_descriptions = None
+    _entity_ids = None
 
     def __init__(self, name, identifier, score, aliases):
         Entity.__init__(self, name)
@@ -64,6 +65,14 @@ class KBEntity(Entity):
         return KBEntity._entity_descriptions[entity_id] \
             if entity_id in KBEntity._entity_descriptions else ""
 
+    @staticmethod
+    def get_entity_descriptions_by_name(name):
+        name = name.lower()
+        if KBEntity._entity_ids is None:
+            KBEntity._read_names()
+        return filter(lambda x: x, [KBEntity.get_entity_description(entity_id)
+                for entity_id in (KBEntity._entity_ids[name] if name in KBEntity._entity_ids else [])])
+
     def sparql_name(self):
         return self.id
 
@@ -86,16 +95,46 @@ class KBEntity(Entity):
             with gzip.open(descriptions_file, 'r') as input_file:
                 KBEntity._entity_descriptions = dict()
                 for index, line in enumerate(input_file):
-                    line = line.decode('utf-8').strip().split('\t')
-                    if len(line) > 2:
-                        mid = line[0].split('/')[-1][:-1]
-                        description = line[2]
-                        pos_left = description.find("\"")
-                        pos_right = description.rfind("\"")
-                        if pos_left != -1 and pos_right != -1:
-                            description = description[pos_left + 1: pos_right]
-                        KBEntity._entity_descriptions[mid] = description
+                    triple = KBEntity.parse_freebase_string_triple(line)
+                    if triple is not None:
+                        KBEntity._entity_descriptions[triple[0]] = triple[2]
+                    if index >= 10000:
+                        break
             logger.info("Done reading entity descriptions.")
+
+    @staticmethod
+    def _read_names():
+        if KBEntity._entity_ids is None:
+            import globals
+            import gzip
+            descriptions_file = globals.config.get('EntityLinker', 'entity-names-file')
+            logger.info("Reading entity names...")
+            with gzip.open(descriptions_file, 'r') as input_file:
+                KBEntity._entity_ids = dict()
+                for index, line in enumerate(input_file):
+                    triple = KBEntity.parse_freebase_string_triple(line)
+                    if triple is not None:
+                        name = triple[2].lower()
+                        if name not in KBEntity._entity_ids:
+                            KBEntity._entity_ids[name] = []
+                        KBEntity._entity_ids[name].append(triple[0])
+                    if index >= 10000:
+                        break
+            logger.info("Done reading entity names.")
+
+    @staticmethod
+    def parse_freebase_string_triple(triple_string):
+        line = triple_string.decode('utf-8').strip().split('\t')
+        if len(line) > 2:
+            mid = line[0].split('/')[-1][:-1]
+            predicate = line[1]
+            obj = line[2]
+            pos_left = obj.find("\"")
+            pos_right = obj.rfind("\"")
+            if pos_left != -1 and pos_right != -1:
+                obj = obj[pos_left + 1: pos_right]
+            return mid, predicate, obj
+        return None
 
 
 class Value(Entity):

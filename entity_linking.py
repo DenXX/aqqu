@@ -67,7 +67,7 @@ def main():
     documents_content = get_documents_content_dict(return_parsed_tokens=True)
     index = 0
     for serp in question_search_results.itervalues():
-        for doc in serp[:10]:
+        for doc in serp[:globals.SEARCH_RESULTS_TOPN]:
             if doc.url in documents_content:
                 doc_entities[doc.url] = entity_linker.identify_entities_in_document(documents_content[doc.url],
                                                                                     min_surface_score=0.5)
@@ -146,6 +146,7 @@ def test_new_entity_linker():
 
 
 if __name__ == "__main__":
+    # main()
     # main_entities()  # For entity linking from SERP for a question
     # main_entity_link_text()  # For entity linking from arbitrary text
     # entity_link_snippets()
@@ -153,4 +154,4 @@ if __name__ == "__main__":
     from entity_linker.entity_linker import KBEntity
     globals.read_configuration('config.cfg')
     entity = KBEntity("Daniil Kharms", "m.03lp80", 1.0, None)
-    print entity.get_description()
+    print KBEntity.get_entity_descriptions_by_name("Denis Savard")

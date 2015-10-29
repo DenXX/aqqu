@@ -43,7 +43,7 @@ def get_n_grams_features(candidate):
     return n_grams
 
 
-def get_query_text_tokens(candidate):
+def get_query_text_tokens(candidate, lemmatize=True):
     """
     Return the query text for the candidate.
     :param candidate:
@@ -63,7 +63,7 @@ def get_query_text_tokens(candidate):
             else:
                 query_text_tokens.append('ENTITY')
         else:
-            query_text_tokens.append(t.lemma)
+            query_text_tokens.append(t.lemma if lemmatize else t.token.lower())
     return query_text_tokens
 
 
