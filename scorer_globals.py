@@ -65,6 +65,32 @@ def init():
                                      extract_text_features_pruning=True,
                                      extract_text_features_ranking=True,
                                      use_pruning=True),
+
+                   ranker.AccuModel('WQ_Ranker_WithTextPruneRank_Skipgram_Dev',
+                                     "webquestions_split_train",
+                                     top_ngram_percentile=5,
+                                     rel_regularization_C=1.0,
+                                     include_skipgram_features=True,
+                                     extract_text_features_pruning=True,
+                                     extract_text_features_ranking=True,
+                                     use_pruning=True),
+                   ranker.AccuModel('WQ_Ranker_WithTextNoPruneRank_Dev',
+                                     "webquestions_split_train",
+                                     top_ngram_percentile=5,
+                                     rel_regularization_C=1.0,
+                                     include_skipgram_features=False,
+                                     extract_text_features_pruning=True,
+                                     extract_text_features_ranking=True,
+                                     use_pruning=False),
+                   ranker.AccuModel('WQ_Ranker_WithTextPruneRank_External_Dev',
+                                     "webquestions_split_train_externalentities",
+                                     top_ngram_percentile=5,
+                                     rel_regularization_C=1.0,
+                                     include_skipgram_features=False,
+                                     extract_text_features_pruning=True,
+                                     extract_text_features_ranking=True,
+                                     use_pruning=True),
+
                    ranker.AccuModel('WQ_Ranker_WithTextPruneRank_ExternalEntities',
                                      "webquestionstrain_externalentities",
                                      top_ngram_percentile=5,
@@ -158,5 +184,11 @@ def init():
          ('webquestionstest_externalentities',
           'evaluation-data/'
           'webquestions.test.copy2.json'),
+         ('webquestions_split_train_externalentities',
+          'evaluation-data/'
+          'webquestions.split.train.copy.json'),
+         ('webquestions_split_dev_externalentities',
+          'evaluation-data/'
+          'webquestions.split.dev.copy.json'),
          ]
     )

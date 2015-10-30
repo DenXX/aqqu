@@ -628,7 +628,7 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
         # Extend with entities found in search results if needed.
         if self.use_web_results:
             entities.extend(self._get_search_results_snippets_entities(text, entities))
-        return entities
+        return sorted(entities, key=lambda x: (len(x.tokens), x.surface_score))
 
     def _get_search_results_snippets_entities(self, question, identified_entities):
         """
@@ -651,28 +651,26 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
                 logger.warning("Document %s not found in document snippets entities dictionary!" % doc.url)
                 continue
 
-            for index, entity in enumerate(
-                    self.doc_snippets_entities[doc.url][:WebSearchResultsExtenderEntityLinker.TOPN_ENTITIES]):
+            for index, entity in enumerate(self.doc_snippets_entities[doc.url]):
                 if entity['mid'] not in identified_entity_mids:
-                    # Skip entities that were linked only once.
-                    if entity['count'] == 1:
-                        continue
-
-                    kb_entity = KBEntity(entity['name'], entity['mid'], entity['score'], None)
-                    perfect_match = self._text_matches_main_name(
-                        kb_entity, ' '.join(token.token for token in entity['matches'][0]))
-                    is_seed = index < WebSearchResultsExtenderEntityLinker.TOP_ENTITIES_AS_SEEDS
-                    # TODO(denxx): At the moment I only take the first match. This might be ok, but need to check.
-                    ie = IdentifiedEntity(entity['matches'][0],
-                                          kb_entity.name, kb_entity, kb_entity.score,
-                                          entity['surface_score'], perfect_match=perfect_match,
-                                          external_entity=True,
-                                          use_as_seed_entity=is_seed,   # we only
-                                          external_entity_count=entity['count'])
-                    entities.append(ie)
+                    if index < WebSearchResultsExtenderEntityLinker.TOPN_ENTITIES and entity['count'] > 1:
+                        kb_entity = KBEntity(entity['name'], entity['mid'], entity['score'], None)
+                        perfect_match = self._text_matches_main_name(
+                            kb_entity, ' '.join(token.token for token in entity['matches'][0]))
+                        is_seed = index < WebSearchResultsExtenderEntityLinker.TOP_ENTITIES_AS_SEEDS
+                        # TODO(denxx): At the moment I only take the first match. This might be ok, but need to check.
+                        ie = IdentifiedEntity(entity['matches'][0],
+                                              kb_entity.name, kb_entity, kb_entity.score,
+                                              entity['surface_score'],
+                                              perfect_match=perfect_match,
+                                              external_entity=True,
+                                              use_as_seed_entity=is_seed,   # we only
+                                              external_entity_count=entity['count'])
+                        entities.append(ie)
                 else:
                     # Update the external entity count.
                     identified_entity_mids[entity['mid']].external_entity_count += entity['count']
+
         return entities
 
 

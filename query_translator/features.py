@@ -16,6 +16,9 @@ N_GRAM_STOPWORDS = {'be', 'do', '?', 'the', 'of', 'is', 'are', 'in', 'was',
                     'to', 'by', 's', 'some', 'were', 'at', 'been', 'do',
                     'and', 'an', 'as'}
 
+def get_skip_grams(tokens):
+    return [tokens[i] + '_*_' + tokens[j] for i in xrange(len(tokens)) for j in xrange(i + 1, len(tokens))]
+
 
 def get_n_grams(tokens, n=2):
     """Return n-grams for the given text tokens.
@@ -28,7 +31,7 @@ def get_n_grams(tokens, n=2):
     return grams
 
 
-def get_n_grams_features(candidate):
+def get_n_grams_features(candidate, include_skip_grams=False):
     """Get ngram features from the query of the candidate.
 
     :type candidate: QueryCandidate
@@ -40,6 +43,8 @@ def get_n_grams_features(candidate):
     n_grams = get_n_grams(query_text_tokens, n=2)
     # Then get uni-grams.
     n_grams.extend(get_n_grams(query_text_tokens, n=1))
+    if include_skip_grams:
+        n_grams.extend(get_skip_grams(query_text_tokens))
     return n_grams
 
 
@@ -78,6 +83,7 @@ class FeatureExtractor(object):
     def __init__(self,
                  generic_features,
                  n_gram_features,
+                 include_skipgram_features=False,
                  relation_score_model=None,
                  entity_features=True,
                  text_features=False):
@@ -92,6 +98,7 @@ class FeatureExtractor(object):
         self.entity_features = entity_features
         self.text_feature_generator = None
         self.generate_text_features = text_features
+        self.include_skipgram_features = include_skipgram_features
         if text_features:
             from text2kb.web_features import WebFeatureGenerator
             self.text_feature_generator = WebFeatureGenerator.init_from_config()
@@ -261,7 +268,7 @@ class FeatureExtractor(object):
                 'result_size_gt_20': result_size_gt_20,
             })
         if self.n_gram_features:
-            features.update(self.extract_ngram_features(candidate))
+            features.update(self.extract_ngram_features(candidate, self.include_skipgram_features))
         if self.relation_score_model:
             rank_score = self.relation_score_model.score(candidate)
             features['relation_score'] = rank_score.score
@@ -273,7 +280,7 @@ class FeatureExtractor(object):
         candidate.feature_extractor = self
         return features
 
-    def extract_ngram_features(self, candidate):
+    def extract_ngram_features(self, candidate, include_skip_grams=False):
         """Extract ngram features from the single candidate.
 
         :param candidate:
@@ -281,7 +288,7 @@ class FeatureExtractor(object):
         """
         ngram_features = dict()
         relations = '_'.join(sorted(candidate.get_relation_names()))
-        n_grams = get_n_grams_features(candidate)
+        n_grams = get_n_grams_features(candidate, include_skip_grams)
         for ng in n_grams:
             # Ignore ngrams that only consist of stopfwords.
             if set(ng).issubset(N_GRAM_STOPWORDS):
