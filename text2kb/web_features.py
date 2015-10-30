@@ -85,8 +85,8 @@ def get_documents_content_dict(return_parsed_tokens=False):
                 index += 1
                 if index % 1000 == 0:
                     logger.info("Read " + str(index) + " documents...")
-                if index > 1000:
-                    break
+                # if index > 1000:
+                #    break
         logger.info("Reading documents content done!")
     return _documents_content
 
@@ -122,7 +122,7 @@ def get_documents_snippet_entities():
             url_entities_dict = pickle.load(entities_file)
         for url, entities in url_entities_dict.iteritems():
             doc_snippet_entities = dict()
-            url_entities_dict[url] = doc_snippet_entities
+            _document_snippet_entities[url] = doc_snippet_entities
             for entity in entities:
                 doc_snippet_entities[entity['name'].lower()] = entity
         logger.info("Reading documents snippet entities done!")
@@ -243,7 +243,7 @@ class WebSearchResult:
         documents_entities = get_documents_entities()
         if self.url in documents_entities:
             return documents_entities[self.url]
-        return None
+        return dict()
 
     def parsed_content(self):
         """
@@ -363,9 +363,9 @@ class WebFeatureGenerator:
         :return: Returns the list of positions of occurences or an empty list.
         """
         res = []
-        answer_token_positions = [(pos, index) for token in answer_tokens
-                                  for index, pos in enumerate(document_token2pos[token]
-                                                              if token in document_token2pos else [])]
+        answer_token_positions = [(pos, index) for index, token in enumerate(answer_tokens)
+                                  for pos in (document_token2pos[token]
+                                              if token in document_token2pos else [])]
         answer_token_positions.sort(key=operator.itemgetter(0))
         current_window = deque()
         token_window_counts = [0, ] * len(answer_tokens)
@@ -377,11 +377,11 @@ class WebFeatureGenerator:
                 current_window.popleft()
             if sum(1 for token_window_count in token_window_counts if token_window_count > 0) > \
                             tokens_fraction * len(answer_tokens):
-                res.append((pos[0][0], pos[-1][0]))
+                res.append((current_window[0][0], current_window[-1][0]))
         return res
 
     @staticmethod
-    def get_qproximity_score(question_tokens_positions, answer_entity_positions, default_distance=0):
+    def get_qproximity_score(question_tokens_positions, answer_entity_positions, doc_length):
         min_scores = []
         avg_scores = []
         for pos in answer_entity_positions:
@@ -390,23 +390,25 @@ class WebFeatureGenerator:
             for question_token_positions in question_tokens_positions:
                 # Check if the list is empty
                 if not question_token_positions:
-                    l = 0
-                    r = len(question_token_positions)
-                    while l < r:
+                    continue
+                l = 0
+                r = len(question_token_positions)
+                while l < r:
                         m = (l + r) / 2
                         if question_token_positions[m] < pos:
                             l = m + 1
                         else:
                             r = m
                 diffs = [abs(question_token_positions[i] - pos)
-                    for i in xrange(l - 1, l + 1) if 0 <= i < len(question_token_positions)]
-                if len(diffs) > 0:
+                         for i in xrange(l - 1, l + 1) if 0 <= i < len(question_token_positions)
+                                                       and question_token_positions[i] != pos]
+                if diffs:
                     scores.append(min(diffs))
-            if len(scores) > 0:
+            if scores:
                 min_scores.append(min(scores))
-                avg_scores.append(1.0 * sum(1 / score for score in scores if score > 0) / len(scores))
-        return min(min_scores) if len(min_scores) > 0 else default_distance, \
-               max(avg_scores) if len(avg_scores) > 0 else default_distance
+                avg_scores.append(1.0 * sum(1.0 / score for score in scores if score > 0) / len(scores))
+        return min(min_scores) if len(min_scores) > 0 else doc_length, \
+               max(avg_scores) if len(avg_scores) > 0 else 0.0
 
     def generate_description_features(self, answers, question_tokens):
         if not answers:
@@ -414,11 +416,12 @@ class WebFeatureGenerator:
 
         description_cosine = []
         is_a_description_cosine = []
+        matched_terms = []
+        is_a_matched_terms = []
         for answer in answers:
             descriptions = KBEntity.get_entity_descriptions_by_name(answer)
             is_a_description_part = []
             for description in descriptions:
-                logger.info(description)
                 is_pos = description.find("is")
                 if is_pos >= 0:
                     dot_pos = description.find(".", is_pos + 1)
@@ -426,24 +429,31 @@ class WebFeatureGenerator:
                         is_a_description_part.append(description[is_pos + 3: dot_pos])
             description_tokens = map(lambda description:
                                      description.encode('utf-8').translate(
-                                         string.maketrans("", ""), string.punctuation).split(),
+                                         string.maketrans("", ""), string.punctuation).lower().split(),
                                      descriptions)
             is_a_description_part = map(lambda description:
                                         description.encode('utf-8').translate(
-                                            string.maketrans("", ""), string.punctuation).split(),
+                                            string.maketrans("", ""), string.punctuation).lower().split(),
                                         is_a_description_part)
             description_tokens = set(token for description in description_tokens for token in description)
             is_a_description_part_tokens = set(token for description in is_a_description_part for token in description)
+            matched_terms.append(len(description_tokens.intersection(question_tokens)))
+            is_a_matched_terms.append(len(is_a_description_part_tokens.intersection(question_tokens)))
             description_cosine.append(WebFeatureGenerator.cosine_similarity(description_tokens, question_tokens))
             is_a_description_cosine.append(WebFeatureGenerator.cosine_similarity(
                 is_a_description_part_tokens, question_tokens))
-        return {"cosine(entity_description, question)": 1.0 * sum(description_cosine) / len(answers),
-                "cosine(is_a_entity_description_part, question)": 1.0 * sum(is_a_description_cosine) / len(answers)}
+        return {"cosine(entity_description, question)": 1.0 * sum(description_cosine) / len(answers) * log(answers),
+                "matches(entity_description, question)": 1.0 * sum(matched_terms) / len(answers) * log(answers),
+                "cosine(is_a_entity_description_part, question)":
+                    1.0 * sum(is_a_description_cosine) / len(answers) * log(answers),
+                "matches(is_a_entity_description, question)":
+                    1.0 * sum(is_a_matched_terms) / len(answers) * log(answers),
+                }
 
     def generate_features(self, candidate):
         punctuation = set(string.punctuation)
         answers = candidate.get_results_text()
-        logger.info("answers: %s", answers)  #################################
+        #logger.info("answers: %s", answers)  #################################
 
         # Skip empty and extra-long answers.
         if len(answers) == 0 or len(answers) > 10:
@@ -453,21 +463,21 @@ class WebFeatureGenerator:
         answers_lower = map(unicode.lower, answers)
         answers_lower_tokens = [filter(lambda token: token not in stopwords, answer.split())
                                 for answer in answers_lower]
-        logger.info("answers_lower_tokens: %s", answers_lower_tokens)  #################################
+        #logger.info("answers_lower_tokens: %s", answers_lower_tokens)  #################################
 
         question_search_results = get_questions_serps()
         question_text = candidate.query.original_query
-        logger.info("question_text: %s", question_text)  #################################
-        logger.info(get_query_text_tokens(candidate))  ###############################
+        #logger.info("question_text: %s", question_text)  #################################
+        #logger.info(get_query_text_tokens(candidate))  ###############################
         if question_text not in question_search_results:
             logger.warning("No search results found for the question % s" % question_text)
             return dict()
         question_tokens = set(filter(lambda token: token not in stopwords and token not in punctuation and
                                                    token != 'STRTS' and token != 'ENTITY',
                                      get_query_text_tokens(candidate, lemmatize=False)))
-        logger.info("question_tokens: %s", question_tokens)  #################################
+        #logger.info("question_tokens: %s", question_tokens)  #################################
         question_entities = [entity.entity.name.lower() for entity in candidate.matched_entities]
-        logger.info("question_entities: %s", question_entities)  #################################
+        #logger.info("question_entities: %s", question_entities)  #################################
 
         answer_occurrences_text = []
         answer_occurrences_entity = []
@@ -493,19 +503,21 @@ class WebFeatureGenerator:
 
         for document in question_search_results[question_text][:globals.SEARCH_RESULTS_TOPN]:
             doc_entities = document.mentioned_entities()
-            logger.info("doc_entities: %s", doc_entities)  #################################
+            #logger.info("doc_entities: %s", doc_entities)  #################################
             doc_token2pos, doc_lemma2pos = document.get_token_to_positions_map()
-            logger.info("doc_token2pos: %s", doc_token2pos)  #################################
+            doc_length = [pos for positions in doc_token2pos.itervalues() for pos in positions]
+            doc_length = max(doc_length) if doc_length else 0
+            #logger.info("doc_token2pos: %s", doc_token2pos)  #################################
             doc_snippet_entities = document.get_snippet_entities()
-            logger.info("doc_snippet_entities: %s", doc_snippet_entities)  #################################
+            #logger.info("doc_snippet_entities: %s", doc_snippet_entities)  #################################
             question_tokens_locations = [doc_token2pos[question_token] if question_token in doc_token2pos else []
                                          for question_token in question_tokens]
-            logger.info("question_tokens_locations: %s", question_tokens_locations)  #################################
+            #logger.info("question_tokens_locations: %s", question_tokens_locations)  #################################
             question_tokens_locations.extend([sorted(set(map(lambda position: (position[0] + position[1]) / 2,
                                                              doc_entities[question_entity]['positions'])))
                                               for question_entity in question_entities
                                               if question_entity in doc_entities])
-            logger.info("question_tokens_locations: %s", question_tokens_locations)  #################################
+            #logger.info("question_tokens_locations: %s", question_tokens_locations)  #################################
 
             question_entity_in_snippets.append(
                 1.0 * sum(1 if WebFeatureGenerator.get_answer_occurrence_by_entity(doc_snippet_entities,
@@ -515,20 +527,20 @@ class WebFeatureGenerator:
             for answer_index in xrange(len(answers)):
                 answer_text_positions = WebFeatureGenerator.get_answer_occurrence_by_name(
                     doc_token2pos, answers_lower_tokens[answer_index])
-                logger.info("answer_text_positions: %s", answer_text_positions)  ###############################
+                # logger.info("answer_text_positions: %s", answer_text_positions)  ###############################
                 answer_entity_positions = WebFeatureGenerator.get_answer_occurrence_by_entity(
                     doc_entities, answers_lower[answer_index])
-                logger.info("answer_entity_positions: %s", answer_entity_positions)  ###############################
+                # logger.info("answer_entity_positions: %s", answer_entity_positions)  ###############################
                 answer_entity_snippet_positions = WebFeatureGenerator.get_answer_occurrence_by_entity(
                     doc_snippet_entities, answers_lower[answer_index])
-                logger.info("answer_entity_snippet_positions: %s", answer_entity_snippet_positions)
+                # logger.info("answer_entity_snippet_positions: %s", answer_entity_snippet_positions)
 
                 qproximity_text = WebFeatureGenerator.get_qproximity_score(question_tokens_locations,
-                                                                           answer_text_positions)
-                logger.info("qproximity_text: %s", qproximity_text)  #######################################
+                                                                           answer_text_positions, doc_length)
+                # logger.info("qproximity_text: %s", qproximity_text)  #######################################
                 qproximity_entity = WebFeatureGenerator.get_qproximity_score(question_tokens_locations,
-                                                                             answer_entity_positions)
-                logger.info("qproximity_entity: %s", qproximity_entity)  #######################################
+                                                                             answer_entity_positions, doc_length)
+                # logger.info("qproximity_entity: %s", qproximity_entity)  #######################################
 
                 answer_occurrences_text[answer_index].append(len(answer_text_positions))
                 answer_occurrences_entity[answer_index].append(len(answer_entity_positions))
@@ -563,7 +575,7 @@ class WebFeatureGenerator:
         features.update(self.get_doc_aggregated_features(answer_min_qproximity_score_entity,
                                                          "web_search:answer_avg_qproximity_by_entity"))
         features.update(self.generate_description_features(answers, question_tokens))
-        logger.info("features: %s", features)  ########################################
+        # logger.info("features: %s", features)  ########################################
         return features
 
     def get_doc_aggregated_features(self, answer_doc_scores, feature_prefix):

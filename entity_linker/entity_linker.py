@@ -98,8 +98,6 @@ class KBEntity(Entity):
                     triple = KBEntity.parse_freebase_string_triple(line)
                     if triple is not None:
                         KBEntity._entity_descriptions[triple[0]] = triple[2]
-                    if index >= 10000:
-                        break
             logger.info("Done reading entity descriptions.")
 
     @staticmethod
@@ -118,8 +116,6 @@ class KBEntity(Entity):
                         if name not in KBEntity._entity_ids:
                             KBEntity._entity_ids[name] = []
                         KBEntity._entity_ids[name].append(triple[0])
-                    if index >= 10000:
-                        break
             logger.info("Done reading entity names.")
 
     @staticmethod
@@ -314,7 +310,6 @@ class EntityLinker:
 
 
     def _text_matches_main_name(self, entity, text):
-
         """
         Check if the entity name is a perfect match on the text.
         :param entity:
