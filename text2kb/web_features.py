@@ -442,12 +442,12 @@ class WebFeatureGenerator:
             description_cosine.append(WebFeatureGenerator.cosine_similarity(description_tokens, question_tokens))
             is_a_description_cosine.append(WebFeatureGenerator.cosine_similarity(
                 is_a_description_part_tokens, question_tokens))
-        return {"cosine(entity_description, question)": 1.0 * sum(description_cosine) / len(answers) * log(answers),
-                "matches(entity_description, question)": 1.0 * sum(matched_terms) / len(answers) * log(answers),
+        return {"cosine(entity_description, question)": 1.0 * sum(description_cosine) / len(answers) * log(len(answers)),
+                "matches(entity_description, question)": 1.0 * sum(matched_terms) / len(answers) * log(len(answers)),
                 "cosine(is_a_entity_description_part, question)":
-                    1.0 * sum(is_a_description_cosine) / len(answers) * log(answers),
+                    1.0 * sum(is_a_description_cosine) / len(answers) * log(len(answers)),
                 "matches(is_a_entity_description, question)":
-                    1.0 * sum(is_a_matched_terms) / len(answers) * log(answers),
+                    1.0 * sum(is_a_matched_terms) / len(answers) * log(len(answers)),
                 }
 
     def generate_features(self, candidate):
