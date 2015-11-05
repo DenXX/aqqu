@@ -651,7 +651,7 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
                 logger.warning("Document %s not found in document snippets entities dictionary!" % doc.url)
                 continue
 
-            for index, entity in enumerate(self.doc_snippets_entities[doc.url]):
+            for index, entity in enumerate(self.doc_snippets_entities[doc.url].itervalues()):
                 if entity['mid'] not in identified_entity_mids:
                     if index < WebSearchResultsExtenderEntityLinker.TOPN_ENTITIES and entity['count'] > 1:
                         kb_entity = KBEntity(entity['name'], entity['mid'], entity['score'], None)

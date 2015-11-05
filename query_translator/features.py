@@ -17,7 +17,7 @@ N_GRAM_STOPWORDS = {'be', 'do', '?', 'the', 'of', 'is', 'are', 'in', 'was',
                     'and', 'an', 'as'}
 
 def get_skip_grams(tokens):
-    return [tokens[i] + '_*_' + tokens[j] for i in xrange(len(tokens)) for j in xrange(i + 1, len(tokens))]
+    return [(tokens[i], '_*_', tokens[j]) for i in xrange(len(tokens)) for j in xrange(i + 2, len(tokens))]
 
 
 def get_n_grams(tokens, n=2):

@@ -479,6 +479,7 @@ class WebFeatureGenerator:
         question_entities = [entity.entity.name.lower() for entity in candidate.matched_entities]
         #logger.info("question_entities: %s", question_entities)  #################################
 
+        answer_occurrences_tokens = []
         answer_occurrences_text = []
         answer_occurrences_entity = []
         answer_snippet_occurrences_entity = []
@@ -491,6 +492,7 @@ class WebFeatureGenerator:
         question_entity_in_snippets = []
 
         for i in xrange(len(answers)):
+            answer_occurrences_tokens.append([])
             answer_occurrences_text.append([])
             answer_occurrences_entity.append([])
             answer_snippet_occurrences_entity.append([])
@@ -525,6 +527,10 @@ class WebFeatureGenerator:
                           else 0 for question_entity in question_entities) / len(question_entities))
 
             for answer_index in xrange(len(answers)):
+                answer_tokens_in_doc_count = 1.0 * len([token for token in answers_lower_tokens[answer_index]
+                                                        if token in doc_token2pos]) /\
+                                             (len(answers_lower_tokens[answer_index]) + 1)
+
                 answer_text_positions = WebFeatureGenerator.get_answer_occurrence_by_name(
                     doc_token2pos, answers_lower_tokens[answer_index])
                 # logger.info("answer_text_positions: %s", answer_text_positions)  ###############################
@@ -542,6 +548,7 @@ class WebFeatureGenerator:
                                                                              answer_entity_positions, doc_length)
                 # logger.info("qproximity_entity: %s", qproximity_entity)  #######################################
 
+                answer_occurrences_tokens[answer_index].append(answer_tokens_in_doc_count)
                 answer_occurrences_text[answer_index].append(len(answer_text_positions))
                 answer_occurrences_entity[answer_index].append(len(answer_entity_positions))
                 answer_snippet_occurrences_entity[answer_index].append(len(answer_entity_snippet_positions))
@@ -556,6 +563,8 @@ class WebFeatureGenerator:
         features.update({"web_search:max_question_entity_in_snippets_doc_count": max(question_entity_in_snippets),
                          "web_search:avg_question_entity_in_snippets_doc_count":
                              1.0 * sum(question_entity_in_snippets) / len(question_entity_in_snippets)})
+        features.update(self.get_doc_aggregated_features(answer_occurrences_tokens,
+                                                         "web_search:answer_occurences_tokens"))
         features.update(self.get_doc_aggregated_features(answer_occurrences_text,
                                                          "web_search:answer_occurrences_by_text"))
         features.update(self.get_doc_aggregated_features(answer_occurrences_entity,
