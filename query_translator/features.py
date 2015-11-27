@@ -48,7 +48,7 @@ def get_n_grams_features(candidate, include_skip_grams=False):
     return n_grams
 
 
-def get_query_text_tokens(candidate, lemmatize=True):
+def get_query_text_tokens(candidate, lemmatize=True, replace_entity=True):
     """
     Return the query text for the candidate.
     :param candidate:
@@ -61,7 +61,7 @@ def get_query_text_tokens(candidate, lemmatize=True):
     query_text_tokens = ['STRTS']
     # Replace entity tokens with "ENTITY"
     for t in candidate.query.query_tokens:
-        if t in entity_tokens:
+        if replace_entity and t in entity_tokens:
             # Don't replace if the previous token is an entity token
             if len(query_text_tokens) > 0 and query_text_tokens[-1] == 'ENTITY':
                 continue

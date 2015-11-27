@@ -85,6 +85,7 @@ def get_documents_content_dict(return_parsed_tokens=False):
                 index += 1
                 if index % 1000 == 0:
                     logger.info("Read " + str(index) + " documents...")
+                # denxx: Speed up startup by uncommenting the lines below. Although not all documents will be loaded.
                 # if index > 1000:
                 #    break
         logger.info("Reading documents content done!")
@@ -456,7 +457,7 @@ class WebFeatureGenerator:
         #logger.info("answers: %s", answers)  #################################
 
         # Skip empty and extra-long answers.
-        if len(answers) == 0 or len(answers) > 10:
+        if len(answers) == 0:
             return dict()
 
         stopwords = globals.get_stopwords()
@@ -474,7 +475,7 @@ class WebFeatureGenerator:
             return dict()
         question_tokens = set(filter(lambda token: token not in stopwords and token not in punctuation and
                                                    token != 'STRTS' and token != 'ENTITY',
-                                     get_query_text_tokens(candidate, lemmatize=False)))
+                                     get_query_text_tokens(candidate, lemmatize=False, replace_entity=False)))
         #logger.info("question_tokens: %s", question_tokens)  #################################
         question_entities = [entity.entity.name.lower() for entity in candidate.matched_entities]
         #logger.info("question_entities: %s", question_entities)  #################################
@@ -596,133 +597,6 @@ class WebFeatureGenerator:
             feature_prefix + "_top1": sum(answer[0] for answer in answer_doc_scores) * mult,
             feature_prefix + "_total": sum(sum(answer) for answer in answer_doc_scores) * mult,
             feature_prefix: sum(1.0 * sum(answer) / len(answer) for answer in answer_doc_scores) * mult,
-        }
-
-    def generate_features_old(self, candidate):
-        """
-        Generates features for the candidate answer bases on search results documents.
-        :param candidate: Candidate answer to generate features for
-        :return: A dictionary from feature name to feature value.
-        """
-        answers = candidate.get_results_text()
-
-        # Read search results data.
-        if self.question_search_results is None:
-            self.question_search_results = get_questions_serps()
-
-        if answers is None:
-            logger.error("Answers is None!")
-            return dict()
-
-        # Ignoring empty and extra long answers, these are unlikely to be correct anyway.
-        if len(answers) == 0 or len(answers) > 10:
-            return dict()
-
-        question = candidate.query.original_query
-
-        # If we don't have anything for the question...
-        if question not in self.question_search_results:
-            logger.warning("No documents found for question: " + question)
-            return dict()
-
-        question_entities = [entity.entity.name.lower() for entity in candidate.matched_entities]
-
-        stopwords = globals.get_stopwords()
-        question_tokens = set(filter(lambda token: token not in stopwords, get_query_text_tokens(candidate)))
-        answers_lower = map(unicode.lower, answers)
-        answers_tokens = [filter(lambda token: token not in stopwords, answer.split())
-                          for answer in answers_lower]
-
-        # Counters which will be used to compute features
-        answer_occurances_entity = [0, ] * len(answers)
-        answer_occurances_snippet_entity = [0, ] * len(answers)
-        answer_occurances_snippet_text = [0, ] * len(answers)
-        answer_doc_occurances_entity = [0, ] * len(answers)
-        answer_doc_occurances_text = [0, ] * len(answers)
-        answer_context_question_similarity = [0.0, ] * len(answers)
-        question_entities_in_snippets = 0
-        sliding_window_score = [0.0, ] * len(answers)
-        min_distance_question_answer_token = [0.0, ] * len(answers)
-        answer_neighbourhood = []
-        for i in xrange(len(answers)):
-            answer_neighbourhood.append(set())
-
-        for rank, doc in enumerate(self.question_search_results[question][:globals.SEARCH_RESULTS_TOPN]):
-            doc_content = doc.parsed_content()
-            doc_tokens = doc.get_content_tokens_set()
-            doc_entities = doc.mentioned_entities()
-            seen_answers = [False, ] * len(answers)
-
-            snippets_tokens = [token.token.lower() for token in doc.get_snippet_tokens()]
-            snippet_entities = doc.get_snippet_entities()
-
-            for question_entity in question_entities:
-                if question_entity in snippet_entities:
-                    question_entities_in_snippets += snippet_entities[question_entity]
-
-            # Check which answer entities are present in the document
-            for i, answer in enumerate(answers_lower):
-                if doc_entities is not None and answer in doc_entities:
-                    answer_occurances_entity[i] += doc_entities[answer]['count']
-                    seen_answers[i] = True
-
-                if answer in snippet_entities:
-                    answer_occurances_snippet_entity[i] += snippet_entities[answer]
-
-            for i, seen in enumerate(seen_answers):
-                if seen:
-                    answer_doc_occurances_entity[i] += 1
-
-            token_to_pos, lemma_to_pos = doc.get_token_to_positions_map()
-            for i, answer_tokens in enumerate(answers_tokens):
-                if _answer_contains(answer_tokens, snippets_tokens) > 0.7:
-                    answer_occurances_snippet_text[i] += 1
-
-                if doc_content is not None:
-                    if _answer_contains(answer_tokens, doc_tokens) > 0.7:
-                        answer_doc_occurances_text[i] += 1
-
-                    # Get a set of positions of answer tokens in the target document.
-                    answer_tokens_positions = set((pos, answer_token)
-                                                  for answer_token in answer_tokens
-                                                  if answer_token in token_to_pos
-                                                  for pos in token_to_pos[answer_token])
-                    question_tokens_positions = set((pos, question_lemma)
-                                                    for question_lemma in question_tokens
-                                                    if question_lemma in lemma_to_pos
-                                                    for pos in lemma_to_pos[question_lemma])
-                    matched_positions = sorted(answer_tokens_positions.union(question_tokens_positions),
-                                               key=operator.itemgetter(0))
-                    score, beg, end = _compute_sliding_window_score(matched_positions,
-                                                                    token_to_pos,
-                                                                    lemma_to_pos,
-                                                                    answer_tokens)
-                    sliding_window_score[i] += score
-                    min_distance_question_answer_token[i] += _compute_min_distance_question_answer(
-                        question_tokens_positions, answer_tokens_positions, len(doc_content))
-
-                    # Get a set of actual tokens in the neighbourhood of answer tokens.
-                    answer_tokens_neighborhood = Counter([doc_content[neighbor][1]  # [1] is lemma
-                                                          for pos, _ in answer_tokens_positions
-                                                          for neighbor in range(max(0, pos - WINDOW_SIZE),
-                                                                                min(len(doc_content),
-                                                                                    pos + WINDOW_SIZE + 1))
-                                                          if neighbor not in answer_tokens_positions])
-                    answer_context_question_similarity[i] += _compute_tokenset_similarity(question_tokens,
-                                                                                          answer_tokens_neighborhood)
-
-        return {
-            'web_results:answer_entity_occurances': 1.0 * sum(answer_occurances_entity) / len(answers),
-            'web_results:answer_entity_doc_count': 1.0 * sum(answer_doc_occurances_entity) / len(answers),
-            'web_results:answer_text_doc_count': 1.0 * sum(answer_doc_occurances_text) / len(answers),
-            'web_results:sliding_window_score': 1.0 * sum(sliding_window_score) / len(answers),
-            'web_results:min_distance_to_question_term_score': 1.0 * sum(min_distance_question_answer_token) / len(
-                answers),
-            'web_results:answer_context_question_similarity':
-                1.0 * sum(answer_context_question_similarity) / len(answers),
-            'web_results:snippets:answer_entity_occurances': 1.0 * sum(answer_occurances_snippet_entity) / len(answers),
-            'web_results:snippets:answer_text_occurances': 1.0 * sum(answer_occurances_snippet_text) / len(answers),
-            'web_results:question_entity_in_snippets': question_entities_in_snippets
         }
 
     @staticmethod
