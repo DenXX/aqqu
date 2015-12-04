@@ -1,21 +1,23 @@
 from math import sqrt
 import justext
 import cPickle as pickle
+import gzip
 import json
 import logging
 from math import log
 import operator
+
+from functools import partial
+from corenlp_parser.parser import Token
 from entity_linker.entity_linker import KBEntity
 import globals
 import os
 import string
-from query_translator.features import get_query_text_tokens
-from collections import Counter, deque
+from collections import deque
+
+from query_translator.alignment import WordEmbeddings
 
 __author__ = 'dsavenk'
-
-WINDOW_SIZE = 5
-SLIDING_WINDOW_SIZE = 20
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,91 @@ _question_search_results = None
 _documents_content = None
 _documents_entities = None
 _document_snippet_entities = None
+_term_counts = None
+_entity_counts = None
+_embeddings = None
+
+WEB_DOCUMENTS_COUNT = 10000000000.0
+CLUEWEB_DOCUMENTS_COUNT = 1040809705.0 + 733019372
+
+_documents_vectors_cache = dict()
+
+
+def get_idf_function(entry_type):
+    if entry_type == "entity" or entry_type == "entity_tfidf":
+        return get_entity_idf
+    elif entry_type == "token" or entry_type == "token_tfidf":
+        return get_token_idf
+    else:
+        raise NotImplementedError()
+
+
+def get_token_idf(token):
+    """
+    Get the approximation of term IDF based on Google N-Grams dataset.
+    :param token: The token to lookup.
+    :return: IDF of the term based on the Google N-grams corpus.
+    """
+    global _term_counts
+    if _term_counts is None:
+        _term_counts = dict()
+        with gzip.open(globals.config.get('WebSearchFeatures', 'term-webcounts-file'), 'r') as input_file:
+            logger.info("Reading term web counts...")
+            for line in input_file:
+                term, count = line.strip().split('\t')
+                count = int(count)
+                _term_counts[term] = count
+            logger.info("Reading term web counts done!")
+
+    if _term_counts:
+        idf = log(max(1.0, WEB_DOCUMENTS_COUNT / (_term_counts[token]
+                                                  if token in _term_counts and _term_counts[token] > 0 else 1.0)))
+        return idf
+    else:
+        return 1.0
+
+
+def get_entity_idf(entity):
+    """
+    Get the entity IDF based on Google's annotation of ClueWeb corpus.
+    :param entity: The entity to lookup.
+    :return: IDF of the entity based on ClueWeb collection.
+    """
+    global _entity_counts
+    if _entity_counts is None:
+        _entity_counts = dict()
+        with gzip.open(globals.config.get('WebSearchFeatures', 'entity-webcounts-file'), 'r') as input_file:
+            logger.info("Reading entity ClueWeb counts...")
+            for line in input_file:
+                entity, count = line.strip().split('\t')
+                count = int(count)
+                _entity_counts[entity] = count
+            logger.info("Reading entity ClueWeb counts done!")
+
+    if _entity_counts:
+        mids = ["/" + mid.replace(".", "/") for mid in KBEntity.get_entityid_by_name(entity)]
+        if mids:
+            idf = min(log(max(1.0, CLUEWEB_DOCUMENTS_COUNT / (_entity_counts[mid]
+                                                              if mid in _entity_counts and _entity_counts[mid] > 0
+                                                              else 1.0)))
+                      for mid in mids)
+            # logger.info("IDF entity %s %.3f" % (entity, idf))
+            return idf
+        return 1.0
+    else:
+        return 0.0
+
+
+def get_embeddings():
+    global _embeddings
+    if _embeddings is None:
+        embeddings_model = globals.config.get('Alignment', 'word-embeddings')
+        _embeddings = WordEmbeddings(embeddings_model)
+    return _embeddings
+
+
+def get_embedding(token):
+    return get_embeddings()[token]
 
 
 def get_questions_serps():
@@ -104,6 +191,7 @@ def get_documents_entities():
         _documents_entities = dict()
         with open(document_entities_file) as entities_file:
             url_entities = pickle.load(entities_file)
+
         for url, entities in url_entities.iteritems():
             doc_entities = dict()
             _documents_entities[url] = doc_entities
@@ -130,94 +218,23 @@ def get_documents_snippet_entities():
     return _document_snippet_entities
 
 
-def _answer_contains(answer_tokens, doc_tokens_set):
-    if len(answer_tokens) == 0:
-        return 0.0
-    return sum(1.0 for answer_token in answer_tokens if answer_token in doc_tokens_set) / len(answer_tokens)
+class SparseVector:
+    def __init__(self, elements_dict):
+        self._elems = elements_dict
+        self._norm = sqrt(sum(val * val for val in self._elems.itervalues()))
 
+    @staticmethod
+    def from_2pos(elem2pos, element_calc_func=lambda elem, positions: 1.0):
+        return SparseVector(dict((elem, element_calc_func(elem, positions))
+                                 for elem, positions in elem2pos.iteritems()))
 
-def _compute_tokenset_similarity(question_tokenset, answer_tokenset):
-    """
-    Computes the cosine similarity between two sets of tokens.
-    :param question_tokens:
-    :param answer_tokens_neighborhood:
-    :return:
-    """
-    if len(question_tokenset) == 0 or len(answer_tokenset) == 0:
-        return 0
-    res = 0
-    sum = 0
-    for token, count in answer_tokenset.iteritems():
-        sum += count
-        if token in question_tokenset:
-            res += count
-    return 1.0 * res / (sqrt(len(question_tokenset))) / sqrt(sum)
+    @staticmethod
+    def compute_tfidf_entity_elements(elem, positions):
+        return log(1 + len(positions)) * get_entity_idf(elem)
 
-
-def _compute_sliding_window_score(matched_positions, token_to_pos, lemma_to_pos, answer_tokens):
-    total_token_counts = dict((token, len(pos)) for token, pos in token_to_pos.iteritems())
-    total_token_counts.update(dict((lemma, len(pos)) for lemma, pos in lemma_to_pos.iteritems()))
-    begin = 0
-    end = 0
-    token_counts = dict()
-    answer_token_counts = dict()
-    score = 0
-    best_beg = 0
-    best_end = 0
-    current_score = 0
-    while begin < len(matched_positions):
-        while end < len(matched_positions) and \
-                                matched_positions[end][0] - matched_positions[begin][0] < SLIDING_WINDOW_SIZE:
-            token = matched_positions[end][1]
-            if token not in token_counts:
-                token_counts[token] = 0
-                current_score += log(1 + 1.0 / total_token_counts[token])
-            if token in answer_tokens:
-                if token not in answer_token_counts:
-                    answer_token_counts[token] = 0
-                answer_token_counts[token] += 1
-            token_counts[token] += 1
-            end += 1
-
-        if len(answer_token_counts.keys()) > 0.7 * len(answer_tokens) and current_score > score:
-            score = current_score
-            best_beg = begin
-            best_end = end
-
-        # Exclude the beginning token
-        token = matched_positions[begin][1]
-        token_counts[token] -= 1
-        if token_counts[token] == 0:
-            del token_counts[token]
-            current_score -= log(1 + 1.0 / total_token_counts[token])
-        if token in answer_tokens:
-            answer_token_counts[token] -= 1
-            if answer_token_counts[token] == 0:
-                del answer_token_counts[token]
-        begin += 1
-    return score, best_beg, best_end
-
-
-def _compute_min_distance_question_answer(question_tokens_positions, answer_tokens_positions, document_length):
-    INF = 1000000
-    diff = INF
-    question_tokens_pos = set(map(lambda x: x[0], question_tokens_positions))
-    answer_tokens_pos = map(lambda x: x[0], answer_tokens_positions.difference(question_tokens_pos))
-    question_tokens_pos = sorted(question_tokens_pos)
-    answer_tokens_pos = sorted(answer_tokens_pos)
-    q_index = 0
-    a_index = 0
-
-    while q_index < len(question_tokens_pos) and a_index < len(answer_tokens_pos):
-        q_pos = question_tokens_pos[q_index]
-        a_pos = answer_tokens_pos[a_index]
-        diff = min(diff, abs(q_pos - a_pos))
-        if q_pos < a_pos:
-            q_index += 1
-        else:
-            a_index += 1
-
-    return 1.0 / (document_length + 1) * diff if diff < INF else 1.0
+    @staticmethod
+    def compute_tfidf_token_elements(elem, positions):
+        return log(1 + len(positions)) * get_token_idf(elem)
 
 
 class WebSearchResult:
@@ -235,6 +252,7 @@ class WebSearchResult:
         self.token_to_pos = None
         self.lemma_to_pos = None
         self.snippet_tokens = None
+        self.snippet_tokens_to_pos = None
         self.snippet_entities = None
 
     def mentioned_entities(self):
@@ -245,6 +263,10 @@ class WebSearchResult:
         if self.url in documents_entities:
             return documents_entities[self.url]
         return dict()
+
+    def get_mentioned_entities_to_pos(self):
+        return dict((entity_name.lower(), map(lambda pos: pos[0], entity['positions']))
+                    for entity_name, entity in self.mentioned_entities().iteritems())
 
     def parsed_content(self):
         """
@@ -267,31 +289,46 @@ class WebSearchResult:
         self.content_tokens = set(token[0] for token in tokens) if tokens else set()
         return self.content_tokens
 
+    @staticmethod
+    def _get_tokens2pos_from_tokens(content):
+        token_to_pos = dict()
+        lemma_to_pos = dict()
+        if content:
+            for pos, token in enumerate(content):
+                lemma = token[1].lower()
+                token = token[0].lower()
+                if token not in token_to_pos:
+                    token_to_pos[token] = []
+                if lemma not in lemma_to_pos:
+                    lemma_to_pos[lemma] = []
+                token_to_pos[token].append(pos)
+                lemma_to_pos[lemma].append(pos)
+        return token_to_pos, lemma_to_pos
+
     def get_token_to_positions_map(self):
         """
         :return: Returns a map from token to its position in the document. The map
         is computed the first time the method is called and then the result is cached.
         """
         if self.token_to_pos is None:
-            self.token_to_pos = dict()
-            self.lemma_to_pos = dict()
-            if self.parsed_content() is not None:
-                for pos, token in enumerate(self.parsed_content()):
-                    lemma = token[1].lower()
-                    token = token[0].lower()
-                    if token not in self.token_to_pos:
-                        self.token_to_pos[token] = []
-                    if lemma not in self.lemma_to_pos:
-                        self.lemma_to_pos[lemma] = []
-                    self.token_to_pos[token].append(pos)
-                    self.lemma_to_pos[lemma].append(pos)
+            self.token_to_pos, self.lemma_to_pos = WebSearchResult._get_tokens2pos_from_tokens(self.parsed_content())
         return self.token_to_pos, self.lemma_to_pos
 
     def get_snippet_tokens(self):
         if self.snippet_tokens is None:
-            parser = globals.get_parser()
-            self.snippet_tokens = parser.parse(self.title + u'\n' + self.snippet).tokens
+            self.snippet_tokens = [Token(token) for token in tokenize(self.title + u'\n' + self.snippet)]
+            for token in self.snippet_tokens:
+                token.lemma = token.token
+            # Skip parsing for performance
+            # parser = globals.get_parser()
+            # self.snippet_tokens = parser.parse(self.title + u'\n' + self.snippet).tokens
         return self.snippet_tokens
+
+    def get_snippet_token2pos(self):
+        if self.snippet_tokens_to_pos is None:
+            self.snippet_tokens_to_pos = WebSearchResult._get_tokens2pos_from_tokens(
+                [(token.token.lower(), token.lemma.lower()) for token in self.get_snippet_tokens()])
+        return self.snippet_tokens_to_pos
 
     def get_snippet_entities(self):
         doc_snippet_entities = get_documents_snippet_entities()
@@ -308,6 +345,10 @@ class WebSearchResult:
                                                                           max_token_window=4,
                                                                           min_surface_score=0.5))
         return self.snippet_entities
+
+    def get_snippet_entities_to_pos(self):
+        return dict((entity_name.lower(), entity['positions'][0])
+                    for entity_name, entity in self.get_snippet_entities().iteritems())
 
     def content(self):
         """
@@ -331,6 +372,392 @@ class WebSearchResult:
             logger.warning(exc)
         return ""
 
+    @staticmethod
+    def get_best_fragment_positions(document_token2pos, document_entity2pos, question_token2pos, window_size=100):
+        question_tokens_count = len(question_token2pos.keys())
+        question_tokens_list = question_token2pos.keys()
+        question_token_positions = [(pos, index) for index, token in enumerate(question_tokens_list)
+                                    if token in document_token2pos for pos in document_token2pos[token]]
+        question_token_positions.sort(key=operator.itemgetter(0))
+        current_window = deque()
+        token_window_counts = [0, ] * question_tokens_count
+
+        best_score = 0.0
+        best_fragment_token2pos = dict()
+        best_fragment_entity2pos = dict()
+
+        for pos in question_token_positions:
+            token_window_counts[pos[1]] += 1
+            current_window.append(pos)
+            while len(current_window) > 0 and current_window[0][0] <= pos[0] - window_size:
+                token_window_counts[current_window[0][1]] -= 1
+                current_window.popleft()
+
+            fragment_token2pos = dict()
+            fragment_entity2pos = dict()
+            for token_pos in current_window:
+                token = question_tokens_list[token_pos[1]]
+                if token not in fragment_token2pos:
+                    fragment_token2pos[token] = []
+                fragment_token2pos[token].append(token_pos[0])
+
+            for entity, positions in document_entity2pos.iteritems():
+                for entity_pos in positions:
+                    if current_window[0][0] <= entity_pos <= current_window[0][0] + window_size:
+                        if entity not in fragment_entity2pos:
+                            fragment_entity2pos[entity] = []
+                        fragment_entity2pos[entity].append(entity_pos)
+
+            current_score = Similarity.bm25_similarity("token_tfidf", SparseVector.from_2pos(fragment_token2pos),
+                                                       SparseVector.from_2pos(question_token2pos))
+            if current_score > best_score:
+                best_score = current_score
+                best_fragment_token2pos = fragment_token2pos
+                best_fragment_entity2pos = fragment_entity2pos
+
+        # logger.info("BEST FRAGMENT %s\t%s\t%.5f" % (str(best_fragment_token2pos.keys()), str(question_token2pos.keys()), best_score))
+        return best_fragment_token2pos, best_fragment_entity2pos
+
+
+
+def generate_text_based_features(candidate):
+    # Get candidate answers
+    answers = map(unicode.lower, candidate.get_results_text())
+    # Skip empty and extra-long answers.
+    if len(answers) == 0:
+        return dict()
+    # Get answers descriptions.
+    answers_descriptions = ['\n'.join(KBEntity.get_entity_descriptions_by_name(answer)) for answer in answers]
+
+    # Get question text.
+    question_text = candidate.query.original_query
+    question_tokens2pos = dict((token, [1, ]) for token in tokenize(question_text))
+    question_token_tfidf = SparseVector.from_2pos(question_tokens2pos,
+                                                  element_calc_func=SparseVector.compute_tfidf_token_elements)
+
+    # Get question entities
+    question_entities2pos = dict((entity.entity.name.lower(), [1, ]) for entity in candidate.matched_entities)
+    question_entitytoken2pos = dict((token, [1, ])
+                                    for entity in candidate.matched_entities
+                                    for token in tokenize(entity.entity.name))
+    question_entity_tfidf = SparseVector.from_2pos(question_entitytoken2pos,
+                                                   element_calc_func=SparseVector.compute_tfidf_token_elements)
+
+    # Get search results and check that they aren't empty
+    questions_search_results = get_questions_serps()
+
+    documents_vectors = []
+    snippets_vectors = []
+    fragment_vectors = []
+    combined_documents_vector = dict()
+    combined_document_snippets_vector = dict()
+
+    representations = ["entity", "token", "entity_tfidf", "token_tfidf"]
+    for r in representations:
+        combined_documents_vector[r] = dict()
+        combined_document_snippets_vector[r] = dict()
+
+    if question_text not in questions_search_results:
+        logger.warning("No search results found for the question %s" % question_text)
+    else:
+        documents_vectors, snippets_vectors, fragment_vectors, combined_documents_vector,\
+            combined_document_snippets_vector = generate_document_vectors(question_text,
+                                                                          question_tokens2pos,
+                                                                          questions_search_results)
+
+    # TODO(denxx): Currently I don't really give much advantage to matches for longer lists. Before I tried to do
+    # log(len(answers))
+    answer_entity2pos = dict((answer_entity, [1, ]) for answer_entity in answers)
+    answer_token2pos = dict((answer_token, [1, ]) for answer_entity in answers
+                            for answer_token in tokenize(answer_entity))
+    answers_vectors = {
+        "entity": SparseVector.from_2pos(answer_entity2pos),
+        "entity_tfidf": SparseVector.from_2pos(answer_entity2pos,
+                                               element_calc_func=SparseVector.compute_tfidf_entity_elements),
+        "token": SparseVector.from_2pos(answer_token2pos),
+        "token_tfidf": SparseVector.from_2pos(answer_token2pos,
+                                              element_calc_func=SparseVector.compute_tfidf_token_elements),
+    }
+
+    answer_descriptions_token2pos = dict((token, [1, ]) for description in answers_descriptions
+                                         for token in tokenize(description))
+    answer_description_vectors = {
+        "entity": SparseVector(dict()),
+        "entity_tfidf": SparseVector(dict()),
+        "token": SparseVector.from_2pos(answer_descriptions_token2pos),
+        "token_tfidf": SparseVector.from_2pos(answer_descriptions_token2pos,
+                                              element_calc_func=SparseVector.compute_tfidf_token_elements),
+    }
+
+    similarity_functions = [Similarity.intersection_similarity,
+                            Similarity.cosine_similarity,
+                            Similarity.bm25_similarity]
+    similarity_functions_names = ["cosine similarity",
+                                  "intersection_similarity",
+                                  "bm25"]
+    features = dict()
+
+    # logger.info("Generating features...")
+    for similarity_name, similarity in zip(similarity_functions_names, similarity_functions):
+        # logger.info("Document-answer similarity...")
+        # Computing document-answer similarities for each representation.
+        document_answer_similarities = {}
+        for doc_vector in documents_vectors:
+            for representation in doc_vector.iterkeys():
+                if representation not in document_answer_similarities:
+                    document_answer_similarities[representation] = []
+                document_answer_similarities[representation].append(similarity(representation,
+                                                                               doc_vector[representation],
+                                                                               answers_vectors[representation]))
+        for representation in document_answer_similarities.iterkeys():
+            features.update({
+                "text_features:avg_document_answer_%s_%s" % (representation, similarity_name):
+                    avg(document_answer_similarities[representation]),
+                "text_features:max_document_answer_%s_%s" % (representation, similarity_name):
+                    max(document_answer_similarities[representation]) if document_answer_similarities[representation]
+                    else 0.0,
+                "text_features:min_document_answer_%s_%s" % (representation, similarity_name):
+                    min(document_answer_similarities[representation]) if document_answer_similarities[representation]
+                    else 0.0,
+            })
+
+        # logger.info("Snippet-answer similarity...")
+        # Computing snippet-answer similarities for each representation.
+        snippet_answer_similarities = {}
+        for snippet_vector in snippets_vectors:
+            for representation in snippet_vector.iterkeys():
+                if representation not in snippet_answer_similarities:
+                    snippet_answer_similarities[representation] = []
+                snippet_answer_similarities[representation].append(similarity(representation,
+                                                                              snippet_vector[representation],
+                                                                              answers_vectors[representation]))
+
+        for representation in snippet_answer_similarities.iterkeys():
+            features.update({
+                "text_features:avg_snippet_answer_%s_%s" % (representation, similarity_name):
+                    avg(snippet_answer_similarities[representation]),
+                "text_features:max_snippet_answer_%s_%s" % (representation, similarity_name):
+                    max(snippet_answer_similarities[representation]) if snippet_answer_similarities[representation] else 0.0,
+                "text_features:min_snippet_answer_%s_%s" % (representation, similarity_name):
+                    min(snippet_answer_similarities[representation]) if snippet_answer_similarities[representation] else 0.0,
+            })
+
+        # logger.info("Fragment-answer similarity...")
+        # Best BM25 fragment-answer similarities.
+        fragment_answer_similarities = {}
+        for fragment_vector in fragment_vectors:
+            for representation in fragment_vector.iterkeys():
+                if representation not in fragment_answer_similarities:
+                    fragment_answer_similarities[representation] = []
+                fragment_answer_similarities[representation].append(similarity(representation,
+                                                                               fragment_vector[representation],
+                                                                               answers_vectors[representation]))
+
+        for representation in fragment_answer_similarities.iterkeys():
+            features.update({
+                "text_features:avg_fragment_answer_%s_%s" % (representation, similarity_name):
+                    avg(fragment_answer_similarities[representation]),
+                "text_features:max_fragment_answer_%s_%s" % (representation, similarity_name):
+                    max(fragment_answer_similarities[representation]) if fragment_answer_similarities[representation] else 0.0,
+                "text_features:min_fragment_answer_%s_%s" % (representation, similarity_name):
+                    min(fragment_answer_similarities[representation]) if fragment_answer_similarities[representation] else 0.0,
+            })
+
+        # logger.info("Combined document-answer similarity...")
+        # Combined documents answer similarity
+        for representation in combined_documents_vector.iterkeys():
+            combineddoc_answer_similarity = similarity(representation,
+                                                       combined_documents_vector[representation],
+                                                       answers_vectors[representation])
+            features.update({
+                "text_features:combdocument_answer_%s_%s" % (representation, similarity_name):
+                    combineddoc_answer_similarity,
+            })
+
+        # logger.info("Combined snippet-answer similarity...")
+        for representation in combined_documents_vector.iterkeys():
+            combineddocsnippet_answer_similarity = similarity(representation,
+                                                              combined_document_snippets_vector[representation],
+                                                              answers_vectors[representation])
+            features.update({
+                "text_features:combdocument_snippet_answer_%s_%s" % (representation, similarity_name):
+                    combineddocsnippet_answer_similarity,
+            })
+
+        # logger.info("Description-question similarity...")
+        description_question_entity_similarity = similarity("token_tfidf", question_entity_tfidf,
+                                                            answer_description_vectors["token_tfidf"])
+        description_question_token_similarity = similarity("token_tfidf", question_token_tfidf,
+                                                           answer_description_vectors["token_tfidf"])
+        features.update({
+            "text_features:description_question_entitytoken_%s" % similarity_name:
+                description_question_entity_similarity,
+            "text_features:description_question_token_%s" % similarity_name: description_question_token_similarity,
+        })
+
+    # logger.info("Done generating features")
+    return features
+
+def generate_document_vectors(question_text, question_tokens2pos, questions_search_results):
+    if not _documents_vectors_cache:
+        import os
+        cache_file = globals.config.get('WebSearchFeatures', 'document-vectors')
+        if os.path.isfile(cache_file):
+            logger.info("Reading cached document vectors...")
+            with open(cache_file, 'r') as inp:
+                # Unpickle until the end of file is reached
+                index = 0
+                while True:
+                    try:
+                        question, vectors = pickle.load(inp)
+                        _documents_vectors_cache[question] = vectors
+                    except (EOFError, pickle.UnpicklingError):
+                        break
+                    index += 1
+                    if index % 1000 == 0:
+                        logger.info("Read " + str(index) + " document vectors...")
+            logger.info("Reading cached document vectors done!")
+
+    if question_text in _documents_vectors_cache:
+        return _documents_vectors_cache[question_text]
+
+    documents_vectors = []
+    snippets_vectors = []
+    fragment_vectors = []
+    combined_doc_token2pos = dict()
+    combined_doc_entity2pos = dict()
+    combined_doc_snippet_token2pos = dict()
+    combined_doc_snippet_entity2pos = dict()
+    for document in questions_search_results[question_text][:globals.SEARCH_RESULTS_TOPN]:
+        # Whole document
+        doc_entity2pos = document.get_mentioned_entities_to_pos()
+        doc_token2pos, doc_lemma2pos = document.get_token_to_positions_map()
+        documents_vectors.append({
+            "entity": SparseVector.from_2pos(doc_entity2pos),
+            "entity_tfidf": SparseVector.from_2pos(doc_entity2pos,
+                                                   element_calc_func=SparseVector.compute_tfidf_entity_elements),
+            "token": SparseVector.from_2pos(doc_token2pos),
+            "token_tfidf": SparseVector.from_2pos(doc_token2pos,
+                                                  element_calc_func=SparseVector.compute_tfidf_token_elements),
+        })
+        merge_2pos_dicts(combined_doc_token2pos, doc_token2pos)
+        merge_2pos_dicts(combined_doc_entity2pos, doc_entity2pos)
+
+        # Snippet
+        doc_snippet_entity2pos = document.get_snippet_entities_to_pos()
+        doc_snippet_token2pos, doc_snippet_lemma2pos = document.get_snippet_token2pos()
+        snippets_vectors.append({
+            "entity": SparseVector.from_2pos(doc_snippet_entity2pos),
+            "entity_tfidf": SparseVector.from_2pos(doc_snippet_entity2pos,
+                                                   element_calc_func=SparseVector.compute_tfidf_entity_elements),
+            "token": SparseVector.from_2pos(doc_snippet_token2pos),
+            "token_tfidf": SparseVector.from_2pos(doc_snippet_token2pos,
+                                                  element_calc_func=SparseVector.compute_tfidf_token_elements),
+        })
+        merge_2pos_dicts(combined_doc_snippet_token2pos, doc_snippet_token2pos)
+        merge_2pos_dicts(combined_doc_snippet_entity2pos, doc_snippet_entity2pos)
+
+        # Best fragment
+        fragment_token2pos, fragment_entity2pos = \
+            WebSearchResult.get_best_fragment_positions(doc_token2pos, doc_entity2pos, question_tokens2pos)
+        fragment_vectors.append({
+            "entity": SparseVector.from_2pos(fragment_entity2pos),
+            "entity_tfidf": SparseVector.from_2pos(fragment_entity2pos,
+                                                   element_calc_func=SparseVector.compute_tfidf_entity_elements),
+            "token": SparseVector.from_2pos(fragment_token2pos),
+            "token_tfidf": SparseVector.from_2pos(fragment_token2pos,
+                                                  element_calc_func=SparseVector.compute_tfidf_token_elements),
+        })
+    combined_documents_vector = {
+        "entity": SparseVector.from_2pos(combined_doc_entity2pos),
+        "entity_tfidf": SparseVector.from_2pos(combined_doc_entity2pos,
+                                               element_calc_func=SparseVector.compute_tfidf_entity_elements),
+        "token": SparseVector.from_2pos(combined_doc_token2pos),
+        "token_tfidf": SparseVector.from_2pos(combined_doc_token2pos,
+                                              element_calc_func=SparseVector.compute_tfidf_token_elements),
+    }
+    combined_document_snippets_vector = {
+        "entity": SparseVector.from_2pos(combined_doc_snippet_entity2pos),
+        "entity_tfidf": SparseVector.from_2pos(combined_doc_snippet_entity2pos,
+                                               element_calc_func=SparseVector.compute_tfidf_entity_elements),
+        "token": SparseVector.from_2pos(combined_doc_snippet_token2pos),
+        "token_tfidf": SparseVector.from_2pos(combined_doc_snippet_token2pos,
+                                              element_calc_func=SparseVector.compute_tfidf_token_elements),
+    }
+
+    # Cache the computed vectors.
+    _documents_vectors_cache[question_text] = (documents_vectors, snippets_vectors, fragment_vectors,
+                                               combined_documents_vector, combined_document_snippets_vector)
+
+    return documents_vectors, snippets_vectors, fragment_vectors, combined_documents_vector, combined_document_snippets_vector
+
+
+def create_document_vectors_cache(questions):
+    cache_file = globals.config.get('WebSearchFeatures', 'document-vectors')
+    with open(cache_file, 'w') as out:
+        for index, question in enumerate(questions):
+            question_token2pos = dict((token, [1, ]) for token in tokenize(question))
+            generate_document_vectors(question, question_token2pos, get_questions_serps())
+            pickle.dump((question, _documents_vectors_cache[question]), out)
+            if index % 100 == 0:
+                logger.info("Cached document vectors for %d questions" % index)
+
+
+def avg(lst):
+    return (1.0 * sum(lst) / len(lst)) if len(lst) > 0 else 0.0
+
+
+class Similarity:
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def cosine_similarity(elem_type, vect1, vect2):
+        res = 0.0
+        for key in vect2._elems.iterkeys():
+            if key in vect1._elems:
+                value = vect2._elems[key]
+                res += value * vect1._elems[key]
+        if res > 0:
+            res /= vect1._norm
+            res /= vect2._norm
+        return res
+
+    @staticmethod
+    def intersection_similarity(elem_type, vect1, vect2):
+        return 1.0 * len(set(vect2._elems.keys()).intersection(vect1._elems.keys()))
+
+    @staticmethod
+    def bm25_similarity(elem_type, vect1, vect2, k1=1.5, b=0.75):
+        d = 1.0 * len(vect1._elems)
+        score = 0.0
+        for elem in vect2._elems.iterkeys():
+            if elem in vect1._elems:
+                tf = vect1._elems[elem]
+                denominator = (tf + k1 * (1 - b + b * (d / Similarity.get_average_document_length(elem_type))))
+                score += get_idf_function(elem_type)(elem) * tf * (k1 + 1.0) / denominator
+        return score
+
+    @staticmethod
+    def get_average_document_length(elem_type):
+        if elem_type == "token" or elem_type == "token_tfidf":
+            return 1000
+        elif elem_type == "entity" or elem_type == "entity_tfidf":
+            return 10
+        else:
+            raise NotImplementedError
+
+
+def tokenize(text):
+    return text.encode('utf-8').translate(string.maketrans("", ""), string.punctuation).lower().decode('utf-8').split()
+
+
+def merge_2pos_dicts(dict1, dict2):
+    for key, positions in dict2.iteritems():
+        if key not in dict1:
+            dict1[key] = []
+        dict1[key].extend(positions)
+    return dict1
 
 class WebFeatureGenerator:
     """
@@ -473,6 +900,7 @@ class WebFeatureGenerator:
         if question_text not in question_search_results:
             logger.warning("No search results found for the question % s" % question_text)
             return dict()
+        from query_translator.features import get_query_text_tokens
         question_tokens = set(filter(lambda token: token not in stopwords and token not in punctuation and
                                                    token != 'STRTS' and token != 'ENTITY',
                                      get_query_text_tokens(candidate, lemmatize=False, replace_entity=False)))
@@ -611,5 +1039,3 @@ if __name__ == "__main__":
                                ': %(module)s : %(message)s',
                         level=logging.INFO)
     globals.read_configuration('config.cfg')
-    feature_generator = WebFeatureGenerator.init_from_config()
-    print feature_generator
