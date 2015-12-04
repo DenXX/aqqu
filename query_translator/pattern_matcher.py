@@ -10,7 +10,7 @@ from entity_linker.entity_linker import Value, DateValue
 import time
 import data
 from answer_type import AnswerType
-from alignment import WordembeddingSynonyms, WordDerivations
+from alignment import WordEmbeddings, WordDerivations
 import globals
 import math
 
@@ -450,7 +450,7 @@ class QueryCandidateExtender:
                                               'word-embeddings')
         word_deriv_file = config_options.get('Alignment',
                                              'word-derivations')
-        we_synonyms = WordembeddingSynonyms(embeddings_model)
+        we_synonyms = WordEmbeddings(embeddings_model)
         word_derivations = WordDerivations(word_deriv_file)
         mediator_relations = data.read_mediator_relations(
             mediator_relations_file)

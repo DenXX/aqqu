@@ -66,6 +66,15 @@ class KBEntity(Entity):
             if entity_id in KBEntity._entity_descriptions else ""
 
     @staticmethod
+    def get_entityid_by_name(name):
+        if KBEntity._entity_ids is None:
+            KBEntity._read_names()
+        if name in KBEntity._entity_ids:
+            return KBEntity._entity_ids[name]
+        else:
+            return []
+
+    @staticmethod
     def get_entity_descriptions_by_name(name):
         name = name.lower()
         if KBEntity._entity_ids is None:
@@ -106,9 +115,9 @@ class KBEntity(Entity):
             import globals
             import gzip
             descriptions_file = globals.config.get('EntityLinker', 'entity-names-file')
+            KBEntity._entity_ids = dict()
             logger.info("Reading entity names...")
             with gzip.open(descriptions_file, 'r') as input_file:
-                KBEntity._entity_ids = dict()
                 for index, line in enumerate(input_file):
                     triple = KBEntity.parse_freebase_string_triple(line)
                     if triple is not None:

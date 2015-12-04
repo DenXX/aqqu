@@ -250,8 +250,7 @@ def test(scorer_name, test_dataset, cached, avg_runs=1):
     for _ in range(avg_runs):
         logger.info("Run %s of %s" % (n_runs, avg_runs))
         n_runs += 1
-        res, test_queries = evaluate_scorer(queries,
-                                                     scorer_obj)
+        res, test_queries = evaluate_scorer(queries, scorer_obj)
         logger.info(res)
         for k, v in res._asdict().iteritems():
             result[k] += v

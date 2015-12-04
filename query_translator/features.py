@@ -11,6 +11,8 @@ from query_candidate import QueryCandidate
 from collections import defaultdict
 import math
 
+from text2kb.web_features import generate_text_based_features
+
 N_GRAM_STOPWORDS = {'be', 'do', '?', 'the', 'of', 'is', 'are', 'in', 'was',
                     'did', 'does', 'a', 'for', 'have', 'there', 'on', 'has',
                     'to', 'by', 's', 'some', 'were', 'at', 'been', 'do',
@@ -273,7 +275,8 @@ class FeatureExtractor(object):
             rank_score = self.relation_score_model.score(candidate)
             features['relation_score'] = rank_score.score
         if self.generate_text_features:
-            features.update(self.text_feature_generator.generate_features(candidate))
+            features.update(generate_text_based_features(candidate))
+            # features.update(self.text_feature_generator.generate_features(candidate))
 
         # Cache features and store which feature extractor was used to produce them.
         candidate.features = features

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 MIN_WORD_SIMILARITY = 0.4
 
 
-class WordembeddingSynonyms(object):
+class WordEmbeddings(object):
 
     def __init__(self, model_fname):
         self.embeddings = models.Word2Vec.load(model_fname)
@@ -43,6 +43,12 @@ class WordembeddingSynonyms(object):
             logger.debug("'%s' or '%s' don't have a word vector" % (word_a,
                                                                     word_b))
             return 0.0
+
+    def __getitem__(self, word):
+        if word in self.embeddings:
+            return self.embeddings[word]
+        else:
+            return self.embeddings.seeded_vector(self, "word2vec_seed")
 
 
 class WordDerivations(object):
