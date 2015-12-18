@@ -28,11 +28,23 @@ if __name__ == "__main__":
                 # "webquestionstrain_externalentities", "webquestionstest_externalentities"]
 
     count = 0
+    correct_relations = set()
     for dataset in datasets:
         queries = get_evaluated_queries(dataset, True, parameters)
         for index, query in enumerate(queries):
             # Correct answer
             # entity_names.update(query.target_result)
+
+            if query.oracle_position != -1:
+                if dataset == datasets[0]:
+                    correct_relations.update([r.name for r in query.eval_candidates[query.oracle_position - 1].query_candidate.relations])
+                else:
+                    for relation in query.eval_candidates[query.oracle_position - 1].query_candidate.relations:
+                        if relation.name not in correct_relations:
+                            print query.utterance
+                            print relation.name
+                            print query.eval_candidates[query.oracle_position - 1].query_candidate
+                            print "-----"
 
             # if query.oracle_position == -1:
             #     entities = set()
@@ -43,15 +55,15 @@ if __name__ == "__main__":
             #     print query.utterance
             #     print entities
 
-            for candidate in query.eval_candidates:
-                answer_entities = set(mid for entity_name in candidate.prediction
-                                      for mid in KBEntity.get_entityid_by_name(entity_name, keep_most_triples=True))
-                question_entities = set(mid for entity in candidate.query_candidate.matched_entities
-                                        for mid in KBEntity.get_entityid_by_name(entity.entity.name,
-                                                                                 keep_most_triples=True))
-                for question_entity in question_entities:
-                    for answer_entity in answer_entities:
-                        print question_entity + "\t" + answer_entity
+            # for candidate in query.eval_candidates:
+            #     answer_entities = set(mid for entity_name in candidate.prediction
+            #                           for mid in KBEntity.get_entityid_by_name(entity_name, keep_most_triples=True))
+            #     question_entities = set(mid for entity in candidate.query_candidate.matched_entities
+            #                             for mid in KBEntity.get_entityid_by_name(entity.entity.name,
+            #                                                                      keep_most_triples=True))
+            #     for question_entity in question_entities:
+            #         for answer_entity in answer_entities:
+            #             print question_entity + "\t" + answer_entity
 
             if index % 100 == 0:
                 print >> stderr, "Processed %d queries" % index

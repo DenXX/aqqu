@@ -170,9 +170,10 @@ class AccuModel(MLModel, Ranker):
                  rel_regularization_C=None,
                  ranking_algorithm="random_forest",
                  ranking_n_estimators=90,
-                 include_skipgram_features=False,
                  extract_text_features_pruning=False,
                  extract_text_features_ranking=False,
+                 extract_cqa_features_pruning=False,
+                 extract_cqa_features_ranking=False,
                  use_pruning=True,
                  **kwargs):
         MLModel.__init__(self, name, train_dataset)
@@ -191,7 +192,6 @@ class AccuModel(MLModel, Ranker):
         self.ranking_algorithm = ranking_algorithm
         self.ranking_n_estimators = ranking_n_estimators
         self.top_ngram_percentile = top_ngram_percentile
-        self.include_skipgram_features = include_skipgram_features
         self.rel_regularization_C = rel_regularization_C
         self.use_pruning = use_pruning
         # Feature extractor for ranking model.
@@ -199,13 +199,15 @@ class AccuModel(MLModel, Ranker):
                                                   False,
                                                   None,
                                                   entity_features=True,
-                                                  text_features=extract_text_features_ranking)
+                                                  text_features=extract_text_features_ranking,
+                                                  cqa_features=extract_cqa_features_ranking)
         if self.use_pruning:
             self.prune_feature_extractor = FeatureExtractor(True,
                                                             False,
                                                             None,
                                                             entity_features=True,
-                                                            text_features=extract_text_features_pruning)
+                                                            text_features=extract_text_features_pruning,
+                                                            cqa_features=extract_cqa_features_pruning)
 
     def load_model(self):
         model_file = self.get_model_filename()
@@ -217,7 +219,6 @@ class AccuModel(MLModel, Ranker):
             self.scaler = scaler
             relation_scorer = RelationNgramScorer(self.get_model_name(),
                                                   self.rel_regularization_C,
-                                                  include_skipgrams=self.include_skipgram_features,
                                                   percentile=self.top_ngram_percentile)
             relation_scorer.load_model()
             self.feature_extractor.relation_score_model = relation_scorer
@@ -241,7 +242,6 @@ class AccuModel(MLModel, Ranker):
     def learn_rel_score_model(self, queries):
         rel_model = RelationNgramScorer(self.get_model_name(),
                                         self.rel_regularization_C,
-                                        include_skipgrams=self.include_skipgram_features,
                                         percentile=self.top_ngram_percentile)
         rel_model.learn_model(queries)
         return rel_model
@@ -623,7 +623,6 @@ class RelationNgramScorer(MLModel):
     def __init__(self,
                  name,
                  regularization_C,
-                 include_skipgrams=False,
                  percentile=None):
         name += self.get_relscorer_suffix()
         MLModel.__init__(self, name, None)
@@ -638,7 +637,6 @@ class RelationNgramScorer(MLModel):
         self.correct_index = -1
         self.feature_extractor = FeatureExtractor(False,
                                                   True,
-                                                  include_skipgram_features=include_skipgrams,
                                                   entity_features=False)
 
     def get_relscorer_suffix(self):
