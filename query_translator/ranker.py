@@ -15,8 +15,10 @@ import random
 import globals
 import numpy as np
 from random import Random
+import cPickle as pickle
 from sklearn import utils
 from sklearn import metrics
+from sklearn.grid_search import GridSearchCV
 from sklearn.feature_selection import SelectKBest, chi2, SelectPercentile
 from sklearn.externals import joblib
 from sklearn.metrics import classification_report
@@ -166,6 +168,8 @@ class AccuModel(MLModel, Ranker):
                  train_dataset,
                  top_ngram_percentile=5,
                  rel_regularization_C=None,
+                 ranking_algorithm="random_forest",
+                 ranking_n_estimators=90,
                  include_skipgram_features=False,
                  extract_text_features_pruning=False,
                  extract_text_features_ranking=False,
@@ -184,6 +188,8 @@ class AccuModel(MLModel, Ranker):
         self.pruner = None
         self.scaler = None
         self.kwargs = kwargs
+        self.ranking_algorithm = ranking_algorithm
+        self.ranking_n_estimators = ranking_n_estimators
         self.top_ngram_percentile = top_ngram_percentile
         self.include_skipgram_features = include_skipgram_features
         self.rel_regularization_C = rel_regularization_C
@@ -293,6 +299,15 @@ class AccuModel(MLModel, Ranker):
         self.feature_extractor.relation_score_model = rel_model
         self.relation_scorer = rel_model
 
+        # logger.info("Saving prune and ranking training datasets...")
+        # with open(globals.config.get('WebSearchFeatures', 'prune-dataset-file'), 'w') as out:
+        #     for label, feature in zip(labels, features):
+        #         pickle.dump((label, feature), out)
+        # with open(globals.config.get('WebSearchFeatures', 'rank-dataset-file'), 'w') as out:
+        #     for label, feature in zip(pair_labels, pair_features):
+        #         pickle.dump((label, feature), out)
+        # logger.info("Saving prune and ranking training datasets done!")
+
         # Train pruning model if needed.
         if self.use_pruning:
             self.prune_feature_extractor.relation_score_model = rel_model
@@ -309,12 +324,31 @@ class AccuModel(MLModel, Ranker):
         vec = DictVectorizer(sparse=False)
         X = vec.fit_transform(features)
         X, labels = utils.shuffle(X, labels, random_state=999)
-        decision_tree = RandomForestClassifier(class_weight='auto',
-                                              random_state=999,
-                                              n_jobs=N_JOBS,
-                                              n_estimators=90)
-        logger.info("Training random forest...")
+
+        if self.ranking_algorithm == 'random_forest':
+            decision_tree = RandomForestClassifier(class_weight='auto',
+                                                  random_state=999,
+                                                  n_jobs=N_JOBS,
+                                                  n_estimators=self.ranking_n_estimators,
+                                                  oob_score=True)
+        elif self.ranking_algorithm == 'gbt':
+            decision_tree = GradientBoostingClassifier(subsample=0.8,
+                                                       n_estimators=self.ranking_n_estimators,
+                                                       min_samples_leaf=10,
+                                                       min_samples_split=20,
+                                                       max_depth=3,
+                                                       learning_rate=0.1)
+        else:
+            raise NotImplementedError()
+
+        logger.info("Training tree ranker...")
         decision_tree.fit(X, labels)
+        if hasattr(decision_tree, 'oob_score_'):
+            logger.info("OOB generalization score  = %.5f" % decision_tree.oob_score_)
+        if hasattr(decision_tree, 'oob_improvement_'):
+            logger.info("OOB improvements = " + str(decision_tree.oob_improvement_))
+        if hasattr(decision_tree, 'train_score_'):
+            logger.info("Training score = " + str(decision_tree.train_score_))
         logger.info("Done.")
         self.model = decision_tree
         self.dict_vec = vec

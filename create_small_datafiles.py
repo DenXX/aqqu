@@ -68,39 +68,39 @@ if __name__ == "__main__":
 
     question_serps = get_questions_serps()
 
-    # parameters = translator.TranslatorParameters()
-    # parameters.require_relation_match = False
-    # parameters.restrict_answer_type = False
-    # queries = get_evaluated_queries("webquestions_small_train", True, parameters)
-    # urls = set()
-    # entity_mids = set()
-    # entity_names = set()
-    # for query in queries:
-    #     entity_names.update(query.target_result)
-    #     for candidate in query.eval_candidates:
-    #         entity_names.update(candidate.prediction)
-    #         for entity in candidate.query_candidate.matched_entities:
-    #             entity_mids.add(entity.entity.entity.id)
-    #             entity_names.add(entity.entity.name)
-    #
-    #     # Go through search results.
-    #     question = query.utterance
-    #     for document in question_serps[question][:globals.SEARCH_RESULTS_TOPN]:
-    #         urls.add(document.url)
-    #         #for entity_name in document.mentioned_entities().iterkeys():
-    #             # entity_mids.add(entity['mid'])
-    #         #    entity_names.add(entity_name)
-    #
-    # print("Filtering document content...")
-    # filter_documents_content_file(urls)
-    #
-    # print("Filtering document entitites...")
-    # filter_documents_entities(urls)
-    #
-    # print("Printing entity names...")
-    # entity_names = map(unicode.lower, entity_names)
-    #
-    # mids = filter_entity_names(entity_names)
-    # filter_entity_descriptions(mids)
+    parameters = translator.TranslatorParameters()
+    parameters.require_relation_match = False
+    parameters.restrict_answer_type = False
+    queries = get_evaluated_queries("webquestions_small_train", True, parameters)
+    urls = set()
+    entity_mids = set()
+    entity_names = set()
+    for query in queries:
+        entity_names.update(query.target_result)
+        for candidate in query.eval_candidates:
+            entity_names.update(candidate.prediction)
+            for entity in candidate.query_candidate.matched_entities:
+                entity_mids.add(entity.entity.entity.id)
+                entity_names.add(entity.entity.name)
+
+        # Go through search results.
+        question = query.utterance
+        for document in question_serps[question][:globals.SEARCH_RESULTS_TOPN]:
+            urls.add(document.url)
+            #for entity_name in document.mentioned_entities().iterkeys():
+                # entity_mids.add(entity['mid'])
+            #    entity_names.add(entity_name)
+
+    print("Filtering document content...")
+    filter_documents_content_file(urls)
+
+    print("Filtering document entitites...")
+    filter_documents_entities(urls)
+
+    print("Printing entity names...")
+    entity_names = map(unicode.lower, entity_names)
+
+    mids = filter_entity_names(entity_names)
+    filter_entity_descriptions(mids)
 
     create_document_vectors_cache(question_serps.keys())

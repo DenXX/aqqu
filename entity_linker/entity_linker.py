@@ -11,7 +11,7 @@ import re
 import operator
 import time
 from surface_index_memory import EntitySurfaceIndexMemory
-from util import normalize_entity_name, remove_number_suffix,\
+from util import normalize_entity_name, remove_number_suffix, \
     remove_prefixes_from_name, remove_suffixes_from_name
 import globals
 
@@ -41,6 +41,7 @@ class KBEntity(Entity):
     """A KB entity."""
     _entity_descriptions = None
     _entity_ids = None
+    _entity_counts = None
 
     def __init__(self, name, identifier, score, aliases):
         Entity.__init__(self, name)
@@ -66,21 +67,31 @@ class KBEntity(Entity):
             if entity_id in KBEntity._entity_descriptions else ""
 
     @staticmethod
-    def get_entityid_by_name(name):
+    def get_entityid_by_name(name, keep_most_triples=False):
         if KBEntity._entity_ids is None:
             KBEntity._read_names()
+        name = name.lower()
         if name in KBEntity._entity_ids:
-            return KBEntity._entity_ids[name]
+            if keep_most_triples:
+                mids = sorted([(mid, KBEntity.get_entity_triples_count(mid)) for mid in KBEntity._entity_ids[name]],
+                              key=operator.itemgetter(1), reverse=True)
+                if mids:
+                    return [mids[0][0], ]
+                return []
+            else:
+                return KBEntity._entity_ids[name]
         else:
             return []
 
     @staticmethod
-    def get_entity_descriptions_by_name(name):
+    def get_entity_descriptions_by_name(name, keep_most_triples_only=False):
         name = name.lower()
         if KBEntity._entity_ids is None:
             KBEntity._read_names()
         return filter(lambda x: x, [KBEntity.get_entity_description(entity_id)
-                for entity_id in (KBEntity._entity_ids[name] if name in KBEntity._entity_ids else [])])
+                                    for entity_id in KBEntity.get_entityid_by_name(
+                                                        KBEntity._entity_ids[name],
+                                                        keep_most_triples=keep_most_triples_only)])
 
     def sparql_name(self):
         return self.id
@@ -128,6 +139,21 @@ class KBEntity(Entity):
             logger.info("Done reading entity names.")
 
     @staticmethod
+    def _read_entity_counts():
+        if KBEntity._entity_counts is None:
+            import globals
+            import gzip
+            counts_file = globals.config.get('EntityLinker', 'entity-counts-file')
+            KBEntity._entity_counts = dict()
+            logger.info("Reading entity counts...")
+            with gzip.open(counts_file, 'r') as input_file:
+                for index, line in enumerate(input_file):
+                    fields = line.strip().split()
+                    mid = fields[1].split('/')[-1][:-1]
+                    count = int(fields[0])
+                    KBEntity._entity_counts[mid] = count
+
+    @staticmethod
     def parse_freebase_string_triple(triple_string):
         line = triple_string.decode('utf-8').strip().split('\t')
         if len(line) > 2:
@@ -140,6 +166,16 @@ class KBEntity(Entity):
                 obj = obj[pos_left + 1: pos_right]
             return mid, predicate, obj
         return None
+
+    @staticmethod
+    def get_entity_triples_count(mid):
+        if KBEntity._entity_counts is None:
+            KBEntity._read_entity_counts()
+
+        if mid in KBEntity._entity_counts:
+            return KBEntity._entity_counts[mid]
+        else:
+            return 0
 
 
 class Value(Entity):
@@ -179,7 +215,7 @@ class DateValue(Value):
 
     def prefixed_sparql_name(self, prefix):
         # Old version uses lowercase t in dateTime
-        #return '"%s"^^xsd:dateTime' % self.value
+        # return '"%s"^^xsd:dateTime' % self.value
         return '"%s"^^xsd:datetime' % self.value
 
     def __hash__(self):
@@ -243,7 +279,7 @@ class IdentifiedEntity():
 
     def as_string(self):
         t = u','.join([u"%s" % t.token
-                      for t in self.tokens])
+                       for t in self.tokens])
         return u"%s: tokens:%s prob:%.3f score:%s perfect_match:%s external:%s external_count:%d" % \
                (self.name, t,
                 self.surface_score,
@@ -272,12 +308,11 @@ class IdentifiedEntity():
 def get_value_for_year(year):
     """Return the correct value representation for a year."""
     # Older Freebase versions do not have the long suffix.
-    #return "%s-01-01T00:00:00+01:00" % (year)
+    # return "%s-01-01T00:00:00+01:00" % (year)
     return "%s" % year
 
 
 class EntityLinker:
-
     def __init__(self, surface_index,
                  max_entities_per_tokens=4):
         self.surface_index = surface_index
@@ -316,7 +351,6 @@ class EntityLinker:
                                                       'max-entites-per-tokens'))
         return EntityLinker(surface_index,
                             max_entities_per_tokens=max_entities_p_token)
-
 
     def _text_matches_main_name(self, entity, text):
         """
@@ -404,7 +438,9 @@ class EntityLinker:
             for end in range(start + 1, n_tokens + 1 if max_token_window == -1 else start + max_token_window + 1):
                 entity_tokens = tokens[start:end]
                 entity_occurence = self.is_entity_occurrence(tokens, start, end)
-                logger.debug("TOKENS: " + ' '.join(token.token+"/"+token.pos for token in entity_tokens) + "\t" + str(entity_occurence))
+                logger.debug(
+                    "TOKENS: " + ' '.join(token.token + "/" + token.pos for token in entity_tokens) + "\t" + str(
+                        entity_occurence))
                 if not entity_occurence:
                     continue
                 entity_str = ' '.join([t.token for t in entity_tokens])
@@ -439,7 +475,7 @@ class EntityLinker:
                                                                          x.surface_score),
                                      reverse=True)
         logging.debug("Entity identification took %.2f ms. Identified %s entities." % (duration,
-                                                                                      len(identified_entities)))
+                                                                                       len(identified_entities)))
         return identified_entities
 
     def identify_entities_in_document(self, document_content_tokens, min_surface_score=0.5, max_token_window=3):
@@ -473,7 +509,6 @@ class EntityLinker:
                         'count': count})
         res.sort(key=operator.itemgetter('count'), reverse=True)
         return res
-
 
     def _filter_identical_entities(self, identified_entities):
         '''
@@ -514,7 +549,7 @@ class EntityLinker:
         for e in identified_entities:
             tokens = tuple(e.tokens)
             if tokens not in token_map:
-                    token_map[tokens] = []
+                token_map[tokens] = []
             token_map[tokens].append(e)
         remove_entities = set()
         for tokens, entities in token_map.iteritems():
@@ -522,7 +557,7 @@ class EntityLinker:
                 sorted_entities = sorted(entities, key=lambda x: x.surface_score, reverse=True)
                 # Ignore the entity if it is not in the top candidates, except, when
                 # it is a perfect match.
-                #for e in sorted_entities[max_threshold:]:
+                # for e in sorted_entities[max_threshold:]:
                 #    if not e.perfect_match or e.score <= 3:
                 #        remove_entities.add(e)
                 remove_entities.update(sorted_entities[max_threshold:])
@@ -549,7 +584,7 @@ class EntityLinker:
         maximal_sets = []
         logger.info(overlapping_sets)
         EntityLinker.get_maximal_sets(0, set(), overlapping_sets, maximal_sets)
-        #logger.info((maximal_sets))
+        # logger.info((maximal_sets))
         result = {frozenset(x) for x in maximal_sets}
         consistent_sets = []
         for s in result:
@@ -562,7 +597,7 @@ class EntityLinker:
 
     @staticmethod
     def get_maximal_sets(i, maximal_set, overlapping_sets, maximal_sets):
-        #logger.info("i: %s" % i)
+        # logger.info("i: %s" % i)
         if i == len(overlapping_sets):
             return
         maximal = True
@@ -573,17 +608,14 @@ class EntityLinker:
                 new_max_set = set(maximal_set)
                 new_max_set.add(e)
                 EntityLinker.get_maximal_sets(i + 1, new_max_set,
-                                               overlapping_sets, maximal_sets)
+                                              overlapping_sets, maximal_sets)
                 maximal = False
         if maximal:
             maximal_sets.append(maximal_set)
 
 
 class WebSearchResultsExtenderEntityLinker(EntityLinker):
-    # How many entities found in search results is allowed to use to build new candidate
-    # queries. The rest of the entities can be used to build type-3 queries.
-    TOP_ENTITIES_AS_SEEDS = 3
-    TOPN_ENTITIES = 1
+    TOPN_ENTITIES = 3
 
     def __init__(self, surface_index, max_entities_per_tokens=4, use_web_results=True, search_results=None,
                  doc_snippets_entities=None):
@@ -636,10 +668,10 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
                                                             find_dates=find_dates)
         # Extend with entities found in search results if needed.
         if self.use_web_results:
-            entities.extend(self._get_search_results_snippets_entities(text, entities))
+            entities.extend(self._get_search_results_snippets_entities(text, tokens, entities))
         return sorted(entities, key=lambda x: (len(x.tokens), x.surface_score))
 
-    def _get_search_results_snippets_entities(self, question, identified_entities):
+    def _get_search_results_snippets_entities(self, question, question_tokens, identified_entities):
         """
         Returns a list of entities that are found in snippets of search results when question is issued
         as a query to a search engine.
@@ -655,32 +687,54 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
             logger.warning("Question '%s' not found in SERPs dictionary!" % question)
             return entities
 
+        search_results_entities = dict()  # mid -> identified entity
         for doc in self.search_results[question][:globals.SEARCH_RESULTS_TOPN]:
             if doc.url not in self.doc_snippets_entities:
                 logger.warning("Document %s not found in document snippets entities dictionary!" % doc.url)
                 continue
 
-            for index, entity in enumerate(self.doc_snippets_entities[doc.url].itervalues()):
-                if entity['mid'] not in identified_entity_mids:
-                    if index < WebSearchResultsExtenderEntityLinker.TOPN_ENTITIES and entity['count'] > 1:
-                        kb_entity = KBEntity(entity['name'], entity['mid'], entity['score'], None)
-                        perfect_match = self._text_matches_main_name(
-                            kb_entity, ' '.join(token.token for token in entity['matches'][0]))
-                        is_seed = index < WebSearchResultsExtenderEntityLinker.TOP_ENTITIES_AS_SEEDS
-                        # TODO(denxx): At the moment I only take the first match. This might be ok, but need to check.
-                        ie = IdentifiedEntity(entity['matches'][0],
-                                              kb_entity.name, kb_entity, kb_entity.score,
-                                              entity['surface_score'],
-                                              perfect_match=perfect_match,
-                                              external_entity=True,
-                                              use_as_seed_entity=is_seed,   # we only
-                                              external_entity_count=entity['count'])
-                        entities.append(ie)
+            for snippet_entity in self.doc_snippets_entities[doc.url].itervalues():
+                if snippet_entity['mid'] not in identified_entity_mids:
+                    if snippet_entity['mid'] in search_results_entities:
+                        search_results_entities[snippet_entity['mid']].external_entity_count += snippet_entity['count']
+                    else:
+                        if has_matched_question_tokens(snippet_entity['name'], question_tokens):
+                            kb_entity = KBEntity(snippet_entity['name'], snippet_entity['mid'], snippet_entity['score'], None)
+                            perfect_match = self._text_matches_main_name(
+                                kb_entity, ' '.join(token.token for token in snippet_entity['matches'][0]))
+                            ie = IdentifiedEntity(snippet_entity['matches'][0],
+                                                  kb_entity.name, kb_entity, kb_entity.score,
+                                                  snippet_entity['surface_score'],
+                                                  perfect_match=perfect_match,
+                                                  external_entity=True,
+                                                  use_as_seed_entity=True,  # we only
+                                                  external_entity_count=snippet_entity['count'])
+                            search_results_entities[snippet_entity['mid']] = ie
+
                 else:
                     # Update the external entity count.
-                    identified_entity_mids[entity['mid']].external_entity_count += entity['count']
+                    identified_entity_mids[snippet_entity['mid']].external_entity_count += snippet_entity['count']
 
+        search_results_entities =\
+            sorted(search_results_entities.values(), key=lambda entity: entity.external_entity_count, reverse=True)
+        entities.extend(search_results_entities[:WebSearchResultsExtenderEntityLinker.TOPN_ENTITIES])
         return entities
+
+
+def has_matched_question_tokens(entity_name, question_tokens):
+    entity_name_tokens = entity_name.lower().split()
+    for entity_name_token in entity_name_tokens:
+        for question_token in question_tokens:
+            if entity_name_token == question_token.token.lower():
+                return True
+
+
+def get_damerau_levenstein(string1, string2):
+    dp = []
+    for i in xrange(len(string1) + 1):
+        dp.append([len(string1) + len(string2), ] * (len(string2) + 1))
+    dp[0][0] = 0
+
 
 
 if __name__ == '__main__':

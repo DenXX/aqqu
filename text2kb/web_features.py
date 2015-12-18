@@ -419,7 +419,6 @@ class WebSearchResult:
         return best_fragment_token2pos, best_fragment_entity2pos
 
 
-
 def generate_text_based_features(candidate):
     # Get candidate answers
     answers = map(unicode.lower, candidate.get_results_text())
@@ -490,10 +489,12 @@ def generate_text_based_features(candidate):
     }
 
     similarity_functions = [Similarity.intersection_similarity,
+                            Similarity.normalized_intersection_similarity,
                             Similarity.cosine_similarity,
                             Similarity.bm25_similarity]
-    similarity_functions_names = ["cosine similarity",
+    similarity_functions_names = ["normalized_intersection_similarity",
                                   "intersection_similarity",
+                                  "cosine_similarity",
                                   "bm25"]
     features = dict()
 
@@ -722,6 +723,14 @@ class Similarity:
             res /= vect1._norm
             res /= vect2._norm
         return res
+
+    @staticmethod
+    def normalized_intersection_similarity(elem_type, vect1, vect2):
+        answer_elements = set(vect2._elems.keys())
+        if not answer_elements:
+            return 0.0
+        question_elements = set(vect1._elems.keys())
+        return 1.0 * len(answer_elements.intersection(question_elements)) / len(answer_elements)
 
     @staticmethod
     def intersection_similarity(elem_type, vect1, vect2):

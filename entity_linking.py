@@ -1,4 +1,5 @@
 from corenlp_parser.parser import CoreNLPParser
+from entity_linker.entity_linker import EntityLinker, WebSearchResultsExtenderEntityLinker
 from text2kb.web_features import WebFeatureGenerator
 
 __author__ = 'dsavenk'
@@ -151,7 +152,12 @@ if __name__ == "__main__":
     # main_entity_link_text()  # For entity linking from arbitrary text
     # entity_link_snippets()
     # test_new_entity_linker()
-    from entity_linker.entity_linker import KBEntity
-    globals.read_configuration('config.cfg')
-    entity = KBEntity("Daniil Kharms", "m.03lp80", 1.0, None)
-    print KBEntity.get_entity_descriptions_by_name("Denis Savard")
+    globals.read_configuration('config_webentity.cfg')
+    entity_linker = WebSearchResultsExtenderEntityLinker.init_from_config()
+    parser = CoreNLPParser.init_from_config()
+    while True:
+       print "Please enter a question:"
+       question = sys.stdin.readline().strip()
+       tokens = parser.parse(question).tokens
+       print entity_linker.identify_entities_in_tokens(tokens, text=question)
+

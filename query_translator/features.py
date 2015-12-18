@@ -114,11 +114,11 @@ class FeatureExtractor(object):
         """
 
         # Return the cached features if possible.
-        if candidate.features:
-            if candidate.feature_extractor == self:
-                return candidate.features
-            else:
-                candidate.clear_features()
+        # if candidate.features:
+        #     if candidate.feature_extractor == self:
+        #         return candidate.features
+        #     else:
+        #         candidate.clear_features()
 
         # The number of literal entities.
         n_literal_entities = 0
@@ -278,9 +278,9 @@ class FeatureExtractor(object):
             features.update(generate_text_based_features(candidate))
             # features.update(self.text_feature_generator.generate_features(candidate))
 
-        # Cache features and store which feature extractor was used to produce them.
-        candidate.features = features
-        candidate.feature_extractor = self
+        # # Cache features and store which feature extractor was used to produce them.
+        # candidate.features = features
+        # candidate.feature_extractor = self
         return features
 
     def extract_ngram_features(self, candidate, include_skip_grams=False):

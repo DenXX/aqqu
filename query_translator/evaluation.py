@@ -384,9 +384,13 @@ def evaluate(queries, output_file="eval_out.log"):
                                                        'oracle_top_10',
                                                        'oracle_top_100',
                                                        'avg_oracle_position',
-                                                       'avg_num_candidates'])
+                                                       'avg_num_candidates',
+                                                       'list_answers_count',
+                                                       'avg_results_size'])
     num_q_no_answer = 0
     num_candidates = 0
+    list_answers = 0
+    results_size = 0
     for q in queries:
         q.reset_results()
         gold_results = q.target_result
@@ -424,6 +428,8 @@ def evaluate(queries, output_file="eval_out.log"):
                     q.f1 = candidate_eval.f1
                     q.false_negatives = candidate_eval.false_negatives
                     q.false_positives = candidate_eval.false_positives
+                    list_answers += 1 if len(prediction.prediction) > 1 else 0
+                    results_size += len(prediction.prediction)
                 if q.oracle_f1 < candidate_eval.f1:
                     q.oracle_f1 = candidate_eval.f1
                     q.oracle_position = i + 1
@@ -483,6 +489,7 @@ def evaluate(queries, output_file="eval_out.log"):
         f1_kw = 2 * precision_kw * recall_kw / (precision_kw + recall_kw)
 
     avg_num_candidates = float(num_candidates) / num_queries
+    results_size = float(results_size) / num_queries
 
     overall_result = EvaluationResult(average_precision,
                                       average_recall,
@@ -504,7 +511,9 @@ def evaluate(queries, output_file="eval_out.log"):
                                       oracle_top_10,
                                       oracle_top_100,
                                       avg_oracle_position,
-                                      avg_num_candidates)
+                                      avg_num_candidates,
+                                      list_answers,
+                                      results_size)
     if output_file:
         write_result_output(queries, output_file)
     return overall_result, queries
