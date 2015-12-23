@@ -6,6 +6,7 @@ Copyright 2015, University of Freiburg.
 Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 
 """
+import logging
 
 from query_candidate import QueryCandidate
 from collections import defaultdict
@@ -13,6 +14,8 @@ import math
 
 from text2kb.cqa_features import generate_cqa_based_features
 from text2kb.web_features import generate_text_based_features
+
+logger = logging.getLogger(__name__)
 
 N_GRAM_STOPWORDS = {'be', 'do', '?', 'the', 'of', 'is', 'are', 'in', 'was',
                     'did', 'does', 'a', 'for', 'have', 'there', 'on', 'has',
@@ -102,9 +105,7 @@ class FeatureExtractor(object):
         self.text_feature_generator = None
         self.generate_text_features = text_features
         self.generate_cqa_features = cqa_features
-        if text_features:
-            from text2kb.web_features import WebFeatureGenerator
-            self.text_feature_generator = WebFeatureGenerator.init_from_config()
+
 
     def extract_features(self, candidate):
         """Extract features from the query candidate.
@@ -270,6 +271,33 @@ class FeatureExtractor(object):
                 'result_size_1_to_20': result_size_1_to_20,
                 'result_size_gt_20': result_size_gt_20,
             })
+
+        # Extra features, not web search based, but potentially useful.
+        # if self.generate_extra_features:
+        #     plural_nouns = 0
+        #     singular_nouns = 0
+        #     for token in candidate.query.query_tokens:
+        #         if token.pos.startswith("V") or token.pos.startswith("MD"):
+        #             break
+        #         elif token.pos == "NNS" or token.pos == "NNPS":
+        #             plural_nouns += 1
+        #         elif token.pos.startswith("N"):
+        #             singular_nouns += 1
+        #
+        #     answer_entities = set(map(unicode.lower, candidate.get_results_text()))
+        #     answer_entity_in_question = False
+        #     for em in candidate.matched_entities:
+        #         if em.entity.name.lower() in answer_entities:
+        #             answer_entity_in_question = True
+        #
+        #     features.update({
+        #         "plural_nouns_count": plural_nouns,
+        #         "singular_nouns_count": singular_nouns,
+        #         "plural_nouns_and_list_results": 1.0 if plural_nouns > 0 and result_size > 1 else 0.0,
+        #         "singular_nouns_and_single_result": 1.0 if singular_nouns > 0 and result_size == 1 else 0.0,
+        #         "answer_entity_in_question": 1.0 if answer_entity_in_question else 0.0,
+        #     })
+
         if self.n_gram_features:
             features.update(self.extract_ngram_features(candidate))
         if self.relation_score_model:

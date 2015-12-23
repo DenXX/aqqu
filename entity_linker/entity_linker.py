@@ -10,12 +10,30 @@ import logging
 import re
 import operator
 import time
+from Levenshtein._levenshtein import jaro_winkler
+
 from surface_index_memory import EntitySurfaceIndexMemory
 from util import normalize_entity_name, remove_number_suffix, \
     remove_prefixes_from_name, remove_suffixes_from_name
 import globals
 
 logger = logging.getLogger(__name__)
+
+STOPWORDS = {"a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "aren't", "as",
+             "at", "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", "can't",
+             "cannot", "could", "couldn't", "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down",
+             "during", "each", "few", "for", "from", "further", "had", "hadn't", "has", "hasn't", "have", "haven't",
+             "having", "he", "he'd", "he'll", "he's", "her", "here", "here's", "hers", "herself", "him", "himself",
+             "his", "how", "how's", "i", "i'd", "i'll", "i'm", "i've", "if", "in", "into", "is", "isn't", "it", "it's",
+             "its", "itself", "let's", "me", "more", "most", "mustn't", "my", "myself", "no", "nor", "not", "of", "off",
+             "on", "once", "only", "or", "other", "ought", "our", "ours	ourselves", "out", "over", "own", "same",
+             "shan't", "she", "she'd", "she'll", "she's", "should", "shouldn't", "so", "some", "such", "than", "that",
+             "that's", "the", "their", "theirs", "them", "themselves", "then", "there", "there's", "these", "they",
+             "they'd", "they'll", "they're", "they've", "this", "those", "through", "to", "too", "under", "until", "up",
+             "very", "was", "wasn't", "we", "we'd", "we'll", "we're", "we've", "were", "weren't", "what", "what's",
+             "when", "when's", "where", "where's", "which", "while", "who", "who's", "whom", "why", "why's", "with",
+             "won't", "would", "wouldn't", "you", "you'd", "you'll", "you're", "you've", "your", "yours", "yourself",
+             "yourselves"}
 
 
 class Entity(object):
@@ -89,9 +107,8 @@ class KBEntity(Entity):
         if KBEntity._entity_ids is None:
             KBEntity._read_names()
         return filter(lambda x: x, [KBEntity.get_entity_description(entity_id)
-                                    for entity_id in KBEntity.get_entityid_by_name(
-                                                        KBEntity._entity_ids[name],
-                                                        keep_most_triples=keep_most_triples_only)])
+                                    for entity_id in KBEntity.get_entityid_by_name(name,
+                                                                                   keep_most_triples=keep_most_triples_only)])
 
     def sparql_name(self):
         return self.id
@@ -615,10 +632,10 @@ class EntityLinker:
 
 
 class WebSearchResultsExtenderEntityLinker(EntityLinker):
-    TOPN_ENTITIES = 3
 
     def __init__(self, surface_index, max_entities_per_tokens=4, use_web_results=True, search_results=None,
-                 doc_snippets_entities=None):
+                 doc_snippets_entities=None, topn_entities=3):
+        self.topn_entities = topn_entities
         if not doc_snippets_entities:
             doc_snippets_entities = dict()
         if not search_results:
@@ -637,6 +654,8 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
                                                       'max-entites-per-tokens'))
         use_web_results = config_options.get('EntityLinker',
                                              'use-web-results') == "True"
+        topn_entities = int(config_options.get('EntityLinker',
+                                              'topn-external-entities'))
         question_search_results = dict()
         doc_snippets_entities = dict()
         if use_web_results:
@@ -646,6 +665,7 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
         return WebSearchResultsExtenderEntityLinker(surface_index,
                                                     max_entities_p_token,
                                                     use_web_results,
+                                                    topn_entities=topn_entities,
                                                     search_results=question_search_results,
                                                     doc_snippets_entities=doc_snippets_entities)
 
@@ -698,7 +718,7 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
                     if snippet_entity['mid'] in search_results_entities:
                         search_results_entities[snippet_entity['mid']].external_entity_count += snippet_entity['count']
                     else:
-                        if has_matched_question_tokens(snippet_entity['name'], question_tokens):
+                        if keep_entity(snippet_entity['matches'][0], snippet_entity['name'], question_tokens):
                             kb_entity = KBEntity(snippet_entity['name'], snippet_entity['mid'], snippet_entity['score'], None)
                             perfect_match = self._text_matches_main_name(
                                 kb_entity, ' '.join(token.token for token in snippet_entity['matches'][0]))
@@ -717,24 +737,29 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
 
         search_results_entities =\
             sorted(search_results_entities.values(), key=lambda entity: entity.external_entity_count, reverse=True)
-        entities.extend(search_results_entities[:WebSearchResultsExtenderEntityLinker.TOPN_ENTITIES])
+        entities.extend(search_results_entities[:self.topn_entities])
         return entities
 
 
-def has_matched_question_tokens(entity_name, question_tokens):
+def keep_entity(matched_tokens, entity_name, question_tokens):
+    if "Wikipedia" in matched_tokens:
+        return True
+
     entity_name_tokens = entity_name.lower().split()
     for entity_name_token in entity_name_tokens:
+        if entity_name_token in STOPWORDS:
+            continue
         for question_token in question_tokens:
-            if entity_name_token == question_token.token.lower():
+            question_token = question_token.token.lower()
+            if question_token in STOPWORDS:
+                continue
+            if get_string_distance(entity_name_token, question_token) > 0.8:
                 return True
+    return False
 
 
-def get_damerau_levenstein(string1, string2):
-    dp = []
-    for i in xrange(len(string1) + 1):
-        dp.append([len(string1) + len(string2), ] * (len(string2) + 1))
-    dp[0][0] = 0
-
+def get_string_distance(string1, string2):
+    return jaro_winkler(string1, string2)
 
 
 if __name__ == '__main__':

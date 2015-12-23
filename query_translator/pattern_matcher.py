@@ -271,6 +271,9 @@ class QueryPatternMatcher:
         return query_candidates
 
     def match_ERMRT_pattern(self):
+        """
+        Get relations that go through a mediator node.
+        """
         logger.info("Matching ERMRT pattern.")
         start = time.time()
         pattern_a = [self.extender.extend_entity_with_mediator,
@@ -291,6 +294,10 @@ class QueryPatternMatcher:
         return query_candidates
 
     def match_ERMRERT_pattern(self):
+        """
+        First find relations between a pair of mentioned entities in the question. Then add some other relation
+        to the mediator node.
+        """
         logger.info("Matching ERMRERT pattern.")
         start = time.time()
 
@@ -823,7 +830,16 @@ class QueryCandidateExtender:
             return domain_rels
         return relations
 
+    def get_answers_notable_types(self, query_candidate):
+        """Return notable types for answers produced by the current candidate.
+        """
+        return query_candidate.get_answers_notable_types()
+
+
     def extend_entity_with_target_relation(self, query_candidate):
+        """
+        Looks up all non-mediator relations from the identified question entities.
+        """
         query_candidates = []
         query = query_candidate.query
         # Get all the relations for the entity.
@@ -866,6 +882,11 @@ class QueryCandidateExtender:
         return query_candidates
 
     def extend_entity_with_mediator_and_entity(self, query_candidate):
+        """
+        Finds relations between identified question entities that go through a mediator node.
+        :param query_candidate:
+        :return:
+        """
         query_candidates = []
         query = query_candidate.query
 
@@ -917,6 +938,9 @@ class QueryCandidateExtender:
         return query_candidates
 
     def extend_entity_with_mediator_and_targetrelation(self, query_candidate):
+        """
+        Finds all relations from the current entity that go through a mediator node.
+        """
         query_candidates = []
         query = query_candidate.query
 
@@ -1065,4 +1089,34 @@ class QueryCandidateExtender:
                 query_candidates.append(new_query_candidate)
                 query_candidate.target_nodes = [
                     new_query_candidate.current_extension]
+        return query_candidates
+
+    def extend_candidate_with_type_filter(self, query_candidate):
+        """
+        Adds notable type filter to the candidates, that return list with elements having different notable type.
+        """
+        query_candidates = []
+        query = query_candidate.query
+
+        # Get all the relations for the entity.
+        types = self.get_answers_notable_types(query_candidate)
+
+
+        remaining_query_content_tokens = get_content_tokens(
+            query_candidate.unmatched_tokens)
+        # Find the relations that match.
+        for rel in types:
+            # Only consider mediators here.
+            if rel not in self.mediator_relations:
+                continue
+            relation_match = self.match_relation_with_tokens(rel,
+                                                             remaining_query_content_tokens,
+                                                             query)
+            if not self.parameters.require_relation_match \
+                    or not relation_match.is_empty():
+                new_query_candidate = query_candidate.extend_with_relation_and_variable(
+                    rel,
+                    relation_match,
+                    allow_new_match=True)
+                query_candidates.append(new_query_candidate)
         return query_candidates

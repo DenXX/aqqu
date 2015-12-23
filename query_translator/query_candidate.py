@@ -430,6 +430,21 @@ class QueryCandidate:
             relations_list = [c for r in result for c in r]
         return relations_list
 
+    def get_answers_notable_types(self):
+        """
+        Returns notable types of all answers returned by the query.
+        """
+        query_current_extension = self.current_extension
+        o = QueryCandidateVariable(None, name='o')
+        p = QueryCandidateRelation(globals.FREEBASE_NOTABLE_TYPE_RELATION, None, None, o)
+        query = self._to_extended_sparql_query(query_current_extension, p, o, [o])
+        result = self.sparql_backend.query(query)
+        notable_types_list = []
+        # Flatten the list.
+        if result:
+            notable_types_list = [c for r in result for c in r]
+        return notable_types_list
+
     def get_next_var(self):
         """
         Get the next free variable index.
@@ -792,12 +807,12 @@ class QueryCandidateNode:
         s = ""
         for r in self.out_relations:
             if r.has_target():
-                s += indent * " " + "%s -> %s -> %s\n" % (
+                s += indent * " " + str(self.__class__) + "\t%s -> %s -> %s\n" % (
                 self.as_simple_string(),
                 r.as_simple_string(),
                 r.target_node.as_simple_string())
                 if r.target_node not in visited:
-                    s += r.target_node.graph_as_simple_string(visited, indent)
+                    s += r.target_node.graph_as_simple_string(visited, indent + 2)
             else:
                 s += indent * " " + "%s -> %s -> X\n" % (
                 self.as_simple_string(),
@@ -808,7 +823,7 @@ class QueryCandidateNode:
                 self.as_simple_string(),
                 r.as_simple_string())
             elif r.source_node not in visited:
-                s += r.source_node.graph_as_simple_string(visited, indent)
+                s += r.source_node.graph_as_simple_string(visited, indent + 2)
         return s
 
     def to_sparql_query_triples(self, visited):
@@ -909,7 +924,8 @@ class QueryCandidateRelation(QueryCandidateNode):
         self.target_node = target_node
         self.reversed = False
         self.score = None
-        self.query_candidate.relations.append(self)
+        if self.query_candidate is not None:
+            self.query_candidate.relations.append(self)
 
         if not self.source_node is None:
             source_node.out_relations.append(self)

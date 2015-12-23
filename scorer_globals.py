@@ -31,6 +31,18 @@ def init():
                                      "webquestionstrain",
                                      top_ngram_percentile=5,
                                      rel_regularization_C=1.0),
+                   ranker.AccuModel('WQ_Ranker_ExtraTemplates',
+                                    "webquestions_test_filter",
+                                    top_ngram_percentile=5,
+                                    ranking_algorithm='random_forest',
+                                    ranking_n_estimators=100,
+                                    rel_regularization_C=1.0,
+                                    extract_text_features_pruning=False,
+                                    extract_text_features_ranking=False,
+                                    extract_cqa_features_ranking=False,
+                                    extract_cqa_features_pruning=False,
+                                    use_pruning=True),
+
                    ranker.AccuModel('WQ_Ranker_Dev',
                                      "webquestions_split_train",
                                      top_ngram_percentile=5,
@@ -120,6 +132,22 @@ def init():
                                      extract_text_features_pruning=False,
                                      extract_text_features_ranking=False,
                                      use_pruning=True),
+                   ranker.AccuModel('WQ_Ranker_ExtEnt_All_RF100_Dev',
+                                     "webquestions_split_train_externalentities_all",
+                                     top_ngram_percentile=5,
+                                     ranking_algorithm='random_forest',
+                                     rel_regularization_C=1.0,
+                                     extract_text_features_pruning=False,
+                                     extract_text_features_ranking=False,
+                                     use_pruning=True),
+                   ranker.AccuModel('WQ_Ranker_ExtEnt_All_RF100',
+                                     "webquestions_train_externalentities_all",
+                                     top_ngram_percentile=5,
+                                     ranking_algorithm='random_forest',
+                                     rel_regularization_C=1.0,
+                                     extract_text_features_pruning=False,
+                                     extract_text_features_ranking=False,
+                                     use_pruning=True),
 
                    # Text models with more iterations
                    ranker.AccuModel('WQ_Ranker_WithTextRank_RF100_Dev',
@@ -191,8 +219,21 @@ def init():
                                    extract_cqa_features_ranking=True,
                                    extract_cqa_features_pruning=False,
                                    use_pruning=True),
+
                   ranker.AccuModel('WQ_Ranker_WithTextCqaPruneRank_RF100_Dev',
                                    "webquestions_split_train",
+                                   top_ngram_percentile=5,
+                                   ranking_algorithm='random_forest',
+                                   ranking_n_estimators=100,
+                                   rel_regularization_C=1.0,
+                                   extract_text_features_pruning=True,
+                                   extract_text_features_ranking=True,
+                                   extract_cqa_features_ranking=True,
+                                   extract_cqa_features_pruning=True,
+                                   use_pruning=True),
+
+                  ranker.AccuModel('WQ_Ranker_WithTextCqaPruneRank_RF100_ExtEnt3',
+                                   "webquestions_split_train_externalentities3",
                                    top_ngram_percentile=5,
                                    ranking_algorithm='random_forest',
                                    ranking_n_estimators=100,
@@ -350,11 +391,30 @@ def init():
           'evaluation-data/'
           'webquestions.split.dev.extent.json'),
 
+
          ('webquestions_split_train_externalentities3',
           'evaluation-data/'
           'webquestions.split.train.extent3.json'),
          ('webquestions_split_dev_externalentities3',
           'evaluation-data/'
           'webquestions.split.dev.extent3.json'),
+
+         ('webquestions_split_train_externalentities_all',
+          'evaluation-data/'
+          'webquestions.split.train.extent_all.json'),
+         ('webquestions_split_dev_externalentities_all',
+          'evaluation-data/'
+          'webquestions.split.dev.extent_all.json'),
+         ('webquestions_train_externalentities_all',
+          'evaluation-data/'
+          'webquestions.train.extent_all.json'),
+         ('webquestions_test_externalentities_all',
+          'evaluation-data/'
+          'webquestions.test.extent_all.json'),
+
+
+         ('webquestions_test_filter',
+          'evaluation-data/'
+          'webquestions.test_for_filter.json')
          ]
     )

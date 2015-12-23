@@ -255,6 +255,15 @@ def test(scorer_name, test_dataset, cached, avg_runs=1):
         for k, v in res._asdict().iteritems():
             result[k] += v
         gc.collect()
+
+        logger.info("Storing evaluated queries...")
+        try:
+            results_filename = scorer_name + "_ON_" + test_dataset + ".queries.pickle"
+            with open(results_filename, 'wb') as out:
+                pickle.dump(test_queries, out)
+        except Exception as e:
+            logger.error("Can't save result queries. " + str(e.message))
+
     for k, v in result.iteritems():
         result[k] = float(result[k]) / avg_runs
     logger.info("Average results over %s runs: " % avg_runs)

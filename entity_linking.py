@@ -1,5 +1,9 @@
+import scorer_globals
 from corenlp_parser.parser import CoreNLPParser
 from entity_linker.entity_linker import EntityLinker, WebSearchResultsExtenderEntityLinker
+from query_translator import translator
+from query_translator.evaluation import load_eval_queries
+from query_translator.learner import get_evaluated_queries
 from text2kb.web_features import WebFeatureGenerator
 
 __author__ = 'dsavenk'
@@ -146,18 +150,56 @@ def test_new_entity_linker():
         print "Translation: ", query_translator.translate_query(question)
 
 
+def get_number_of_external_entities():
+    globals.read_configuration('config_webentity.cfg')
+    parser = CoreNLPParser.init_from_config()
+    entity_linker = WebSearchResultsExtenderEntityLinker.init_from_config()
+    entity_linker.topn_entities = 100000
+    scorer_globals.init()
+
+    parameters = translator.TranslatorParameters()
+    parameters.require_relation_match = False
+    parameters.restrict_answer_type = False
+
+    datasets = ["webquestions_split_train", "webquestions_split_dev",]
+    # datasets = ["webquestions_split_train_externalentities", "webquestions_split_dev_externalentities",]
+    # datasets = ["webquestions_split_train_externalentities3", "webquestions_split_dev_externalentities3",]
+
+    external_entities_count = []
+    for dataset in datasets:
+        queries = load_eval_queries(dataset)
+        for index, query in enumerate(queries):
+            entities = entity_linker.identify_entities_in_tokens(parser.parse(query.utterance).tokens, text=query.utterance, find_dates=False)
+            print "-------------------------"
+            print query.utterance
+            print "\n".join(map(str, sorted(entities, key=lambda entity: entity.external_entity_count, reverse=True)))
+
+            external_entities_count.append(0)
+            for entity in entities:
+                if entity.external_entity:
+                    external_entities_count[-1] += 1
+            if index % 100 == 0:
+                print >> sys.stderr, "%s queries processed" % index
+    print "========================================="
+    print external_entities_count
+    print sum(external_entities_count)
+    print len(external_entities_count)
+
+
 if __name__ == "__main__":
+    get_number_of_external_entities()
     # main()
     # main_entities()  # For entity linking from SERP for a question
     # main_entity_link_text()  # For entity linking from arbitrary text
     # entity_link_snippets()
     # test_new_entity_linker()
-    globals.read_configuration('config_webentity.cfg')
-    entity_linker = WebSearchResultsExtenderEntityLinker.init_from_config()
-    parser = CoreNLPParser.init_from_config()
-    while True:
-       print "Please enter a question:"
-       question = sys.stdin.readline().strip()
-       tokens = parser.parse(question).tokens
-       print entity_linker.identify_entities_in_tokens(tokens, text=question)
 
+    # globals.read_configuration('config_webentity.cfg')
+    # entity_linker = WebSearchResultsExtenderEntityLinker.init_from_config()
+    # entity_linker.topn_entities = 1000000
+    # parser = CoreNLPParser.init_from_config()
+    # while True:
+    #    print "Please enter a question:"
+    #    question = sys.stdin.readline().strip()
+    #    tokens = parser.parse(question).tokens
+    #    print "\n".join(map(str, entity_linker.identify_entities_in_tokens(tokens, text=question)))

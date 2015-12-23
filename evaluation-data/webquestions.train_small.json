@@ -57,5 +57,23 @@
     "result": [
       "Normandy"
     ]
+  },
+  {
+    "url": "http://www.freebase.com/view/en/new_york_yankees", 
+    "targetValue": "(list (description \"1941 World Series\") (description \"1939 World Series\") (description \"1932 World Series\") (description \"1928 World Series\") (description \"1936 World Series\") (description \"1923 World Series\") (description \"1927 World Series\") (description \"1937 World Series\") (description \"1938 World Series\") (description \"1943 World Series\"))", 
+    "utterance": "in what years did the new york yankees win the world series?", 
+    "id": 3712, 
+    "result": [
+      "1941 World Series", 
+      "1939 World Series", 
+      "1932 World Series", 
+      "1928 World Series", 
+      "1936 World Series", 
+      "1923 World Series", 
+      "1927 World Series", 
+      "1937 World Series", 
+      "1938 World Series", 
+      "1943 World Series"
+    ]
   }
 ]
