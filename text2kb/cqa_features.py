@@ -32,7 +32,7 @@ def get_cqa_token_relation_pmi_score(token, relation):
 
 
 def generate_cqa_based_features(candidate):
-    question_tokens = [t.token.lower() for t in candidate.query_candidate.query.query_tokens]
+    question_tokens = [t.token.lower() for t in candidate.query.query_tokens]
     pmi_scores = []
     for relation in candidate.relations:
         relation_name = relation.name
