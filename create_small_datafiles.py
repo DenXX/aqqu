@@ -6,7 +6,8 @@ import cPickle as pickle
 from entity_linker.entity_linker import KBEntity
 from query_translator import translator
 from query_translator.learner import get_evaluated_queries
-from text2kb.web_features import get_questions_serps, create_document_vectors_cache, generate_document_vectors, tokenize
+from text2kb.web_features import get_questions_serps, create_document_vectors_cache, generate_document_vectors
+from text2kb.utils import tokenize, get_questions_serps
 
 
 def filter_documents_content_file(urls_to_keep):

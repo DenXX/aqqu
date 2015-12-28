@@ -3,8 +3,7 @@ from corenlp_parser.parser import CoreNLPParser
 from entity_linker.entity_linker import EntityLinker, WebSearchResultsExtenderEntityLinker
 from query_translator import translator
 from query_translator.evaluation import load_eval_queries
-from query_translator.learner import get_evaluated_queries
-from text2kb.web_features import WebFeatureGenerator
+from text2kb.utils import tokenize
 
 __author__ = 'dsavenk'
 
@@ -20,27 +19,10 @@ logging.basicConfig(format='%(asctime)s : %(levelname)s '
 logger = logging.getLogger(__name__)
 
 
-def main_parse():
-    globals.read_configuration('config.cfg')
-    parser = CoreNLPParser.init_from_config()
-    feature_generator = WebFeatureGenerator.init_from_config()
-    print datetime.now()
-    with open(sys.argv[1], 'w') as out_file:
-        index = 0
-        for serp in feature_generator.question_serps.itervalues():
-            for doc in serp[:10]:
-                content = doc.content()
-                if len(content) > 0:
-                    document = (doc.url, parser.parse(content))
-                    pickle.dump(document, out_file)
-            print "Query #", index, datetime.now()
-            index += 1
-
-
 def main_entities():
     globals.read_configuration('config.cfg')
-    from text2kb.web_features import get_questions_serps
-    from text2kb.web_features import get_documents_entities
+    from text2kb.utils import get_questions_serps
+    from text2kb.utils import get_documents_entities
     serps = get_questions_serps()
     doc_entities = get_documents_entities()
     import operator
@@ -67,7 +49,8 @@ def main():
     config_options = globals.config
 
     doc_entities = dict()
-    from text2kb.web_features import get_questions_serps, get_documents_content_dict
+    from text2kb.utils import get_documents_content_dict
+    from text2kb.utils import get_questions_serps
     question_search_results = get_questions_serps()
     documents_content = get_documents_content_dict(return_parsed_tokens=True)
     index = 0
@@ -87,7 +70,7 @@ def main_entity_link_text():
     globals.read_configuration('config.cfg')
     entity_linker = globals.get_entity_linker()
     parser = globals.get_parser()
-    from text2kb.web_features import get_questions_serps
+    from text2kb.utils import get_questions_serps
     question_search_results = get_questions_serps()
     globals.logger.setLevel("DEBUG")
     import operator
@@ -121,7 +104,7 @@ def main_entity_link_text():
 def entity_link_snippets():
     globals.read_configuration('config.cfg')
     entity_linker = globals.get_entity_linker()
-    from text2kb.web_features import get_questions_serps
+    from text2kb.utils import get_questions_serps
     question_search_results = get_questions_serps()
     doc_snippet_entities = dict()
     for index, serp in enumerate(question_search_results.itervalues()):
@@ -186,8 +169,25 @@ def get_number_of_external_entities():
     print len(external_entities_count)
 
 
+def get_question_terms():
+    globals.read_configuration('config_webentity.cfg')
+    scorer_globals.init()
+    datasets = ["webquestionstrain", "webquestionstest",]
+
+    question_tokens = set()
+    for dataset in datasets:
+        queries = load_eval_queries(dataset)
+        for index, query in enumerate(queries):
+            question_tokens.update(token for token in tokenize(query.utterance))
+    print question_tokens
+
+
 if __name__ == "__main__":
-    get_number_of_external_entities()
+    #get_number_of_external_entities()
+
+    get_question_terms()
+
+
     # main()
     # main_entities()  # For entity linking from SERP for a question
     # main_entity_link_text()  # For entity linking from arbitrary text

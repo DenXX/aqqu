@@ -659,7 +659,8 @@ class WebSearchResultsExtenderEntityLinker(EntityLinker):
         question_search_results = dict()
         doc_snippets_entities = dict()
         if use_web_results:
-            from text2kb.web_features import get_questions_serps, get_documents_snippet_entities
+            from text2kb.utils import get_documents_snippet_entities
+            from text2kb.utils import get_questions_serps
             question_search_results = get_questions_serps()
             doc_snippets_entities = get_documents_snippet_entities()
         return WebSearchResultsExtenderEntityLinker(surface_index,

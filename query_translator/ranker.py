@@ -7,6 +7,7 @@ Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 
 """
 import math
+import cPickle as pickle
 import time
 import logging
 import operator
@@ -15,26 +16,20 @@ import random
 import globals
 import numpy as np
 from random import Random
-import cPickle as pickle
 from sklearn import utils
 from sklearn import metrics
-from sklearn.grid_search import GridSearchCV
-from sklearn.feature_selection import SelectKBest, chi2, SelectPercentile
+from sklearn.feature_selection import chi2, SelectPercentile
 from sklearn.externals import joblib
 from sklearn.metrics import classification_report
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, \
-    AdaBoostRegressor, RandomForestRegressor, ExtraTreesClassifier, GradientBoostingClassifier 
-from sklearn import pipeline, grid_search
-from sklearn.linear_model import SGDClassifier, SGDRegressor, \
-    LogisticRegressionCV, LogisticRegression
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn import grid_search
+from sklearn.linear_model import SGDClassifier, LogisticRegressionCV
 from sklearn.feature_extraction import DictVectorizer
-from sklearn.preprocessing import StandardScaler, LabelEncoder, \
-    Normalizer, MinMaxScaler
-from evaluation import EvaluationQuery, EvaluationCandidate
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from evaluation import EvaluationQuery
 from query_translator.oracle import EntityOracle
 from features import FeatureExtractor
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.pipeline import FeatureUnion
+
 from sklearn.cross_validation import KFold
 
 RANDOM_SHUFFLE = 0.3
@@ -174,6 +169,8 @@ class AccuModel(MLModel, Ranker):
                  extract_text_features_ranking=False,
                  extract_cqa_features_pruning=False,
                  extract_cqa_features_ranking=False,
+                 extract_clueweb_features_pruning=False,
+                 extract_clueweb_features_ranking=False,
                  use_pruning=True,
                  **kwargs):
         MLModel.__init__(self, name, train_dataset)
@@ -200,14 +197,16 @@ class AccuModel(MLModel, Ranker):
                                                   None,
                                                   entity_features=True,
                                                   text_features=extract_text_features_ranking,
-                                                  cqa_features=extract_cqa_features_ranking)
+                                                  cqa_features=extract_cqa_features_ranking,
+                                                  clueweb_features=extract_clueweb_features_ranking)
         if self.use_pruning:
             self.prune_feature_extractor = FeatureExtractor(True,
                                                             False,
                                                             None,
                                                             entity_features=True,
                                                             text_features=extract_text_features_pruning,
-                                                            cqa_features=extract_cqa_features_pruning)
+                                                            cqa_features=extract_cqa_features_pruning,
+                                                            clueweb_features=extract_clueweb_features_pruning)
 
     def load_model(self):
         model_file = self.get_model_filename()
@@ -299,14 +298,14 @@ class AccuModel(MLModel, Ranker):
         self.feature_extractor.relation_score_model = rel_model
         self.relation_scorer = rel_model
 
-        # logger.info("Saving prune and ranking training datasets...")
-        # with open(globals.config.get('WebSearchFeatures', 'prune-dataset-file'), 'w') as out:
-        #     for label, feature in zip(labels, features):
-        #         pickle.dump((label, feature), out)
-        # with open(globals.config.get('WebSearchFeatures', 'rank-dataset-file'), 'w') as out:
-        #     for label, feature in zip(pair_labels, pair_features):
-        #         pickle.dump((label, feature), out)
-        # logger.info("Saving prune and ranking training datasets done!")
+        logger.info("Saving prune and ranking training datasets...")
+        with open(globals.config.get('WebSearchFeatures', 'prune-dataset-file'), 'w') as out:
+            for label, feature in zip(labels, features):
+                pickle.dump((label, feature), out)
+        with open(globals.config.get('WebSearchFeatures', 'rank-dataset-file'), 'w') as out:
+            for label, feature in zip(pair_labels, pair_features):
+                pickle.dump((label, feature), out)
+        logger.info("Saving prune and ranking training datasets done!")
 
         # Train pruning model if needed.
         if self.use_pruning:
@@ -334,8 +333,8 @@ class AccuModel(MLModel, Ranker):
         elif self.ranking_algorithm == 'gbt':
             decision_tree = GradientBoostingClassifier(subsample=0.8,
                                                        n_estimators=self.ranking_n_estimators,
-                                                       min_samples_leaf=10,
-                                                       min_samples_split=20,
+                                                       min_samples_leaf=2,
+                                                       min_samples_split=5,
                                                        max_depth=3,
                                                        learning_rate=0.1)
         else:
