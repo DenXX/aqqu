@@ -228,7 +228,8 @@ class DateValue(Value):
         Value.__init__(self, name, date)
 
     def sparql_name(self):
-        return self.value
+        return self.prefixed_sparql_name("")
+        # return self.value
 
     def prefixed_sparql_name(self, prefix):
         # Old version uses lowercase t in dateTime

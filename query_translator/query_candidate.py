@@ -264,8 +264,9 @@ class DateRangeFilter:
         self.date_node = date_node
 
     def __repr__(self):
-        return "%s < %s && %s < %s" % (self.from_var.prefixed_sparql_name(), self.date_node.prefixed_sparql_name(),
-                                        self.date_node.prefixed_sparql_name(), self.to_var.prefixed_sparql_name())
+        return "year(xsd:date(%s)) <= year(xsd:date(%s)) && year(xsd:date(%s)) <= year(xsd:date(%s))" % (
+            self.from_var.get_sparql_name(), self.date_node.get_sparql_name(),
+            self.date_node.get_sparql_name(), self.to_var.get_sparql_name())
 
 
 class QueryCandidate:
@@ -530,15 +531,15 @@ class QueryCandidate:
 
     def extend_with_date_range_filter(self, from_relation, to_relation, target_date):
         new_query_candidate = copy.deepcopy(self)
+        mediator_node = new_query_candidate.extension_history[-2]
         date_entity_match = EntityMatch(target_date)
-        entity_node = new_query_candidate.current_extension
-        date_node = QueryCandidateNode(target_date.value, target_date, new_query_candidate)
+        date_node = QueryCandidateNode(target_date.entity.value, target_date, new_query_candidate)
         from_date_node = QueryCandidateVariable(new_query_candidate)
-        from_relation_node = QueryCandidateRelation(from_relation, new_query_candidate, entity_node, from_date_node)
+        from_relation_node = QueryCandidateRelation(from_relation, new_query_candidate, mediator_node, from_date_node)
         to_date_node = QueryCandidateVariable(new_query_candidate)
-        to_relation_node = QueryCandidateRelation(to_relation, new_query_candidate, entity_node, to_date_node)
+        to_relation_node = QueryCandidateRelation(to_relation, new_query_candidate, mediator_node, to_date_node)
         new_query_candidate.add_entity_match(date_entity_match)
-        new_query_candidate.set_date_range_filter(date_node, from_relation_node, to_relation_node)
+        new_query_candidate.set_date_range_filter(date_node, from_date_node, to_date_node)
         return new_query_candidate
 
     def set_date_range_filter(self, target_date, from_relation_node, to_relation_node):
