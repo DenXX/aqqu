@@ -48,34 +48,8 @@ def print_sparql_queries():
 
 
 
-if __name__ == "__main__":
-    # print_sparql_queries()
-    # exit()
-
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Dump qa entity pairs.")
-    parser.add_argument("--config",
-                        default="config.cfg",
-                        help="The configuration file to use.")
-    parser.add_argument("--output",
-                        help="The file to dump results to.")
-    args = parser.parse_args()
-    globals.read_configuration(args.config)
-    scorer_globals.init()
-
-    parameters = translator.TranslatorParameters()
-    parameters.require_relation_match = False
-    parameters.restrict_answer_type = False
-
-    # datasets = ["webquestions_split_train", "webquestions_split_dev",]
-    # datasets = ["webquestions_split_train_externalentities", "webquestions_split_dev_externalentities",]
-    # datasets = ["webquestions_split_train_externalentities3", "webquestions_split_dev_externalentities3",]
-    datasets = ["webquestions_split_train_externalentities_all", "webquestions_split_dev_externalentities_all", ]
-
-    count = 0
-    correct_relations = set()
-    positions = []
+def test():
+    # This piece of code was used to print index of the external entity that produces the best candidate.
     for dataset in datasets:
         queries = get_evaluated_queries(dataset, True, parameters)
         for index, query in enumerate(queries):
@@ -103,6 +77,38 @@ if __name__ == "__main__":
     print positions, min(positions), avg(positions), max(positions)
 
 
+
+if __name__ == "__main__":
+    # print_sparql_queries()
+    # exit()
+
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Dump qa entity pairs.")
+    parser.add_argument("--config",
+                        default="config.cfg",
+                        help="The configuration file to use.")
+    parser.add_argument("--output",
+                        help="The file to dump results to.")
+    args = parser.parse_args()
+    globals.read_configuration(args.config)
+    scorer_globals.init()
+
+    parameters = translator.TranslatorParameters()
+    parameters.require_relation_match = False
+    parameters.restrict_answer_type = False
+
+    # datasets = ["webquestions_split_train", "webquestions_split_dev",]
+    # datasets = ["webquestions_split_train_externalentities", "webquestions_split_dev_externalentities",]
+    # datasets = ["webquestions_split_train_externalentities3", "webquestions_split_dev_externalentities3",]
+    datasets = ["webquestions_train_externalentities_all", "webquestions_test_externalentities_all", ]
+
+    count = 0
+    correct_relations = set()
+    positions = []
+    for dataset in datasets:
+        queries = get_evaluated_queries(dataset, True, parameters)
+        for index, query in enumerate(queries):
             # Correct answer
             # entity_names.update(query.target_result)
 
@@ -127,15 +133,15 @@ if __name__ == "__main__":
             #     print ">>>", query.utterance
             #     print entities
 
-            # for candidate in query.eval_candidates:
-            #     answer_entities = set(mid for entity_name in candidate.prediction
-            #                           for mid in KBEntity.get_entityid_by_name(entity_name, keep_most_triples=True))
-            #     question_entities = set(mid for entity in candidate.query_candidate.matched_entities
-            #                             for mid in KBEntity.get_entityid_by_name(entity.entity.name,
-            #                                                                      keep_most_triples=True))
-            #     for question_entity in question_entities:
-            #         for answer_entity in answer_entities:
-            #             print question_entity + "\t" + answer_entity
+            for candidate in query.eval_candidates:
+                answer_entities = set(mid for entity_name in candidate.prediction
+                                      for mid in KBEntity.get_entityid_by_name(entity_name, keep_most_triples=True))
+                question_entities = set(mid for entity in candidate.query_candidate.matched_entities
+                                        for mid in KBEntity.get_entityid_by_name(entity.entity.name,
+                                                                                 keep_most_triples=True))
+                for question_entity in question_entities:
+                    for answer_entity in answer_entities:
+                        print question_entity + "\t" + answer_entity
 
-            # if index % 100 == 0:
-            #     print >> stderr, "Processed %d queries" % index
+            if index % 100 == 0:
+                print >> stderr, "Processed %d queries" % index

@@ -11,6 +11,9 @@ import logging
 from query_candidate import QueryCandidate
 from collections import defaultdict
 import math
+import numpy as np
+
+from text2kb.utils import get_embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,19 @@ def get_n_grams_features(candidate, include_skip_grams=False):
     return n_grams
 
 
+def get_embedding_features(candidate):
+    query_text_tokens = [x.lower() for x in get_query_text_tokens(candidate) if x != 'STRTS' and x != 'ENTITY']
+    embeddings = get_embeddings()
+    token_embeddings = np.zeros(embeddings.embeddings.vector_size)
+    count = 0.0
+    for token in query_text_tokens:
+        if token in embeddings.embeddings:
+            token_embeddings += embeddings[token]
+            count += 1
+    token_embeddings /= count
+    return dict(("emb_dim_" + str(index), value) for index, value in enumerate(token_embeddings))
+
+
 def get_query_text_tokens(candidate, lemmatize=True, replace_entity=True):
     """
     Return the query text for the candidate.
@@ -88,6 +104,7 @@ class FeatureExtractor(object):
                  n_gram_features,
                  relation_score_model=None,
                  entity_features=True,
+                 embedding_question_features=False,
                  text_features=False,
                  cqa_features=False,
                  clueweb_features=False):
@@ -101,6 +118,7 @@ class FeatureExtractor(object):
         self.relation_score_model = relation_score_model
         self.entity_features = entity_features
         self.text_feature_generator = None
+        self.generate_embedding_question_features = embedding_question_features
         self.generate_text_features = text_features
         self.generate_cqa_features = cqa_features
         self.generate_clueweb_features = clueweb_features
@@ -299,6 +317,8 @@ class FeatureExtractor(object):
 
         if self.n_gram_features:
             features.update(self.extract_ngram_features(candidate))
+        if self.generate_embedding_question_features:
+            features.update(get_embedding_features(candidate))
         if self.relation_score_model:
             rank_score = self.relation_score_model.score(candidate)
             features['relation_score'] = rank_score.score

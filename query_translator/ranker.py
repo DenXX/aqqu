@@ -165,6 +165,7 @@ class AccuModel(MLModel, Ranker):
                  rel_regularization_C=None,
                  ranking_algorithm="random_forest",
                  ranking_n_estimators=90,
+                 use_embeddings_relation_model=False,
                  extract_text_features_pruning=False,
                  extract_text_features_ranking=False,
                  extract_cqa_features_pruning=False,
@@ -186,6 +187,7 @@ class AccuModel(MLModel, Ranker):
         self.pruner = None
         self.scaler = None
         self.kwargs = kwargs
+        self.use_embedding_relation_model = use_embeddings_relation_model
         self.ranking_algorithm = ranking_algorithm
         self.ranking_n_estimators = ranking_n_estimators
         self.top_ngram_percentile = top_ngram_percentile
@@ -216,9 +218,13 @@ class AccuModel(MLModel, Ranker):
                 = joblib.load(model_file)
             self.model = model
             self.scaler = scaler
-            relation_scorer = RelationNgramScorer(self.get_model_name(),
-                                                  self.rel_regularization_C,
-                                                  percentile=self.top_ngram_percentile)
+            if self.use_embedding_relation_model:
+                relation_scorer = EmbeddingRelationModel(self.get_model_name(),
+                                                    self.rel_regularization_C)
+            else:
+                relation_scorer = RelationNgramScorer(self.get_model_name(),
+                                                    self.rel_regularization_C,
+                                                    percentile=self.top_ngram_percentile)
             relation_scorer.load_model()
             self.feature_extractor.relation_score_model = relation_scorer
 
@@ -239,9 +245,12 @@ class AccuModel(MLModel, Ranker):
             raise
 
     def learn_rel_score_model(self, queries):
-        rel_model = RelationNgramScorer(self.get_model_name(),
-                                        self.rel_regularization_C,
-                                        percentile=self.top_ngram_percentile)
+        if self.use_embedding_relation_model:
+            rel_model = EmbeddingRelationModel(self.get_model_name(), self.rel_regularization_C)
+        else:
+            rel_model = RelationNgramScorer(self.get_model_name(),
+                                            self.rel_regularization_C,
+                                            percentile=self.top_ngram_percentile)
         rel_model.learn_model(queries)
         return rel_model
 
@@ -745,6 +754,121 @@ class RelationNgramScorer(MLModel):
         score = prob[0][self.correct_index]
         return RankScore(score)
 
+class EmbeddingRelationModel(MLModel):
+    """Learns a scoring based on question ngrams."""
+
+    def __init__(self, name, C):
+        name += self.get_relscorer_suffix()
+        MLModel.__init__(self, name, None)
+        # Note: The model is lazily when needed.
+        self.model = None
+        self.regularization_C = C,
+        self.label_encoder = None
+        self.dict_vec = None
+        # The index of the correct label.
+        self.correct_index = -1
+        self.feature_extractor = FeatureExtractor(False,
+                                                  False,
+                                                  embedding_question_features=True,
+                                                  entity_features=False)
+
+    def get_relscorer_suffix(self):
+        return "_EmbRelScore"
+
+    def load_model(self):
+        model_file = self.get_model_filename()
+        try:
+            [model, label_enc, dict_vec] \
+                = joblib.load(model_file)
+            self.model = model
+            self.dict_vec = dict_vec
+            self.label_encoder = label_enc
+            logger.info("Loaded scorer model from %s" % model_file)
+        except IOError:
+            logger.warn("Model file %s could not be loaded." % model_file)
+            raise
+
+    def learn_model(self, train_queries):
+        features, labels = construct_question_relation_examples(train_queries, self.feature_extractor)
+
+        logger.info("#of labeled examples: %s" % len(features))
+        logger.info("#labels: %s" % len(set(labels)))
+        label_encoder = LabelEncoder()
+        labels = label_encoder.fit_transform(labels)
+        vec = DictVectorizer(sparse=False)
+        X = vec.fit_transform(features)
+        X, labels = utils.shuffle(X, labels, random_state=999)
+        logger.info("#Features: %s" % len(vec.vocabulary_))
+        # Perform grid search or use provided C.
+        if self.regularization_C is None:
+            logger.info("Performing grid search.")
+            relation_scorer = SGDClassifier(loss='log', class_weight='auto',
+                                            n_iter=np.ceil(
+                                                10 ** 6 / len(labels)),
+                                            random_state=999)
+            cv_params = [{"alpha": [10.0, 5.0, 2.0, 1.5, 1.0, 0.5,
+                                    0.1, 0.01, 0.001, 0.0001]}]
+            grid_search_cv = grid_search.GridSearchCV(relation_scorer,
+                                                      cv_params,
+                                                      n_jobs=8,
+                                                      verbose=1,
+                                                      cv=8,
+                                                      refit=True)
+            grid_search_cv.fit(X, labels)
+            logger.info("Best score: %.5f" % grid_search_cv.best_score_)
+            logger.info("Best params: %s" % grid_search_cv.best_params_)
+            self.model = grid_search_cv.best_estimator_
+        else:
+            logger.info("Learning relation scorer with C: %s."
+                        % self.regularization_C)
+            n_iter = np.ceil(10**6 / len(labels))
+            if n_iter == 0:
+                n_iter = 100
+            # relation_scorer = SGDClassifier(loss='log', class_weight='auto',
+            #                                 n_iter=n_iter,
+            #                                 alpha=self.regularization_C,
+            #                                 random_state=999)
+            relation_scorer = LogisticRegressionCV()
+            relation_scorer.fit(X, labels)
+            logger.info("Done.")
+            self.model = relation_scorer
+        self.dict_vec = vec
+        self.label_encoder = label_encoder
+        self.print_model()
+
+    def print_model(self, n_top=20):
+        dict_vec = self.dict_vec
+        classifier = self.model
+        logger.info("Printing top %s weights." % n_top)
+        logger.info("intercept: %.4f" % classifier.intercept_[0])
+        feature_weights = []
+        for name, index in dict_vec.vocabulary_.iteritems():
+            feature_weights.append((name, classifier.coef_[0][index]))
+        feature_weights = sorted(feature_weights, key=lambda x: math.fabs(x[1]),
+                                 reverse=True)
+        for name, weight in feature_weights[:n_top]:
+            logger.info("%s: %.4f" % (name, weight))
+
+    def store_model(self):
+        logger.info("Writing model to %s." % self.get_model_filename())
+        joblib.dump([self.model, self.label_encoder,
+                     self.dict_vec], self.get_model_filename())
+        logger.info("Done.")
+
+    def score(self, candidate):
+        if not self.model:
+            self.load_model()
+        features = self.feature_extractor.extract_features(candidate)
+        X = self.dict_vec.transform(features)
+        prob = self.model.predict_proba(X)
+        # Prob is an array of n_examples, n_classes
+        relations = '_'.join(sorted(candidate.get_relation_names()))
+        try:
+            score = prob[0][self.label_encoder.transform(relations)]
+            return RankScore(score)
+        except ValueError:
+            return RankScore(0.0)
+
 
 class SimpleScoreRanker(Ranker):
     """Ranks based on a simple score of relation and entity matches."""
@@ -1134,8 +1258,8 @@ def construct_examples(queries, f_extractor):
                 labels.append(0)
     return features, labels
 
-# This method isn't used in the code.
-def construct_ngram_examples(queries, f_extractor):
+
+def construct_question_relation_examples(queries, f_extractor):
     """Construct training examples from candidates.
 
     Construct a list of examples from the given evaluated queries.
@@ -1143,32 +1267,16 @@ def construct_ngram_examples(queries, f_extractor):
     :type queries list[EvaluationQuery]
     :return:
     """
-    logger.info("Extracting features from candidates.")
+    logger.info("Extracting question-relation features from candidates.")
     labels = []
     features = []
     for query in queries:
-        positive_relations = set()
-        seen_positive_relations = set()
-        oracle_position = query.oracle_position
+        oracle_position = query.oracle_position - 1
         candidates = [x.query_candidate for x in query.eval_candidates]
-        negative_relations = set()
-        for i, candidate in enumerate(candidates):
-            relation = " ".join(candidate.get_relation_names())
-            if query.eval_candidates[i].evaluation_result.f1 == 1.0 \
-                    or i + 1 == oracle_position:
-                positive_relations.add(relation)
-        for i, candidate in enumerate(candidates):
-            relation = " ".join(candidate.get_relation_names())
-            candidate_features = f_extractor.extract_features(candidate)
-            if relation in positive_relations and \
-                            relation not in seen_positive_relations:
-                seen_positive_relations.add(relation)
-                labels.append(1)
-                features.append(candidate_features)
-            elif relation not in negative_relations:
-                negative_relations.add(relation)
-                labels.append(0)
-                features.append(candidate_features)
+        if 0 < oracle_position < len(candidates):
+            relations = '_'.join(sorted(candidates[oracle_position].get_relation_names()))
+            labels.append(relations)
+            features.append(f_extractor.extract_features(candidates[oracle_position]))
     return features, labels
 
 
