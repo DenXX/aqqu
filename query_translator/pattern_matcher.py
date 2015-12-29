@@ -1015,6 +1015,13 @@ class QueryCandidateExtender:
         query = query_candidate.query
         query_mediator_node = query_candidate.current_extension
         relations = self.get_relation_suggestions(query_candidate)
+
+        date_relations = [r for r in relations if self.relation_has_date_target(r)]
+        from_relations = [r for r in date_relations if "from" in r.split(".")[-1] or "start" in r.split(".")[-1]]
+        to_relations = [r for r in date_relations if "to" in r.split(".")[-1] or "end" in r.split(".")[-1]]
+        logger.info(from_relations)
+        logger.info(to_relations)
+
         # Filled mediator relation slots.
         filled_rev_rel_slots = {self.reverse_relations[r.name] for r in
                                 query_mediator_node.in_relations
@@ -1101,7 +1108,7 @@ class QueryCandidateExtender:
         # Get all the relations for the entity.
         types = self.get_answers_notable_types(query_candidate)
 
-
+        # EVERYTHING BELOW ISN'T FINISHED...
         remaining_query_content_tokens = get_content_tokens(
             query_candidate.unmatched_tokens)
         # Find the relations that match.
