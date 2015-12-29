@@ -359,25 +359,17 @@ def init():
                                      extract_text_features_ranking=True,
                                      use_pruning=True),
 
-
-
-
-
-
-                   ranker.AccuModel('WQ_Ranker_WithTextPruneRank_ExternalEntities',
-                                     "webquestionstrain_externalentities",
-                                     top_ngram_percentile=5,
-                                     rel_regularization_C=1.0,
-                                     extract_text_features_pruning=True,
-                                     extract_text_features_ranking=True,
-                                     use_pruning=True),
-                   ranker.AccuModel('WQ_Ranker_WithText_NoPruning',
-                                     "webquestionstrain",
-                                     top_ngram_percentile=5,
-                                     rel_regularization_C=1.0,
-                                     extract_text_features_pruning=False,
-                                     extract_text_features_ranking=True,
-                                     use_pruning=False),
+                   ranker.AccuModel('WQ_Ranker_small',
+                                    "webquestions_small_test",
+                                    top_ngram_percentile=5,
+                                    rel_regularization_C=1.0,
+                                    extract_text_features_ranking=False,
+                                    extract_text_features_pruning=False,
+                                    extract_cqa_features_pruning=False,
+                                    extract_cqa_features_ranking=False,
+                                    extract_clueweb_features_pruning=False,
+                                    extract_clueweb_features_ranking=False,
+                                    use_pruning=True),
                    ranker.AccuModel('WQ_Ranker_WithText_WithCqa_small',
                                     "webquestions_small_train",
                                     top_ngram_percentile=5,

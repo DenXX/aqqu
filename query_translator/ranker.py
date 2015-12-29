@@ -1198,6 +1198,7 @@ def construct_pair_examples(queries, f_extractor):
     logger.info("Extracting features from candidates.")
     labels = []
     features = []
+
     for query_index, query in enumerate(queries):
         if query_index % 100 == 0:
             logger.info("Processed " + str(query_index) + " queries...")
@@ -1207,6 +1208,7 @@ def construct_pair_examples(queries, f_extractor):
         # perfect.
         correct_cands = set()
         candidates = [x.query_candidate for x in query.eval_candidates]
+        features_cache = dict()
         for i, candidate in enumerate(candidates):
             if i + 1 == oracle_position:
                 correct_cands.add(candidate)
@@ -1217,13 +1219,20 @@ def construct_pair_examples(queries, f_extractor):
             if sample_size < 200:
                 sample_size = min(200, n_candidates)
             sample_candidates = random.sample(candidates, sample_size)
-            #sample_candidates = candidates
             for candidate in sample_candidates:
                 for correct_cand in correct_cands:
                     if candidate in correct_cands:
                         continue
-                    correct_cand_features = f_extractor.extract_features(correct_cand)
-                    candidate_features = f_extractor.extract_features(candidate)
+                    if correct_cand not in features_cache:
+                        correct_cand_features = f_extractor.extract_features(correct_cand)
+                        features_cache[correct_cand] = correct_cand_features
+                    if candidate not in features_cache:
+                        candidate_features = f_extractor.extract_features(candidate)
+                        features_cache[candidate] = candidate_features
+
+                    correct_cand_features = features_cache[correct_cand]
+                    candidate_features = features_cache[candidate]
+
                     diff = feature_diff(correct_cand_features,
                                         candidate_features)
                     features.append(diff)
