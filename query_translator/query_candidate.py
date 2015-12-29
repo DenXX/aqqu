@@ -256,6 +256,18 @@ class EntityMatch:
     def __repr__(self):
         return self.as_string()
 
+
+class DateRangeFilter:
+    def __init__(self, date_node, from_var, to_var):
+        self.from_var = from_var
+        self.to_var = to_var
+        self.date_node = date_node
+
+    def __repr__(self):
+        return "%s < %s && %s < %s" % (self.from_var.prefixed_sparql_name(), self.date_node.prefixed_sparql_name(),
+                                        self.date_node.prefixed_sparql_name(), self.to_var.prefixed_sparql_name())
+
+
 class QueryCandidate:
     """
     The contained object pointing to a root node.
@@ -306,6 +318,7 @@ class QueryCandidate:
         self.query_results = None
         self.features = None
         self.feature_extractor = None
+        self.date_range_filter = None
 
     def __unicode__(self):
         return u','.join(self.get_entity_names()) +\
@@ -515,6 +528,23 @@ class QueryCandidate:
         new_query_candidate.set_new_extension(target_node)
         return new_query_candidate
 
+    def extend_with_date_range_filter(self, from_relation, to_relation, target_date):
+        new_query_candidate = copy.deepcopy(self)
+        date_entity_match = EntityMatch(target_date)
+        entity_node = new_query_candidate.current_extension
+        date_node = QueryCandidateNode(target_date.value, target_date, new_query_candidate)
+        from_date_node = QueryCandidateVariable(new_query_candidate)
+        from_relation_node = QueryCandidateRelation(from_relation, new_query_candidate, entity_node, from_date_node)
+        to_date_node = QueryCandidateVariable(new_query_candidate)
+        to_relation_node = QueryCandidateRelation(to_relation, new_query_candidate, entity_node, to_date_node)
+        new_query_candidate.add_entity_match(date_entity_match)
+        new_query_candidate.set_date_range_filter(date_node, from_relation_node, to_relation_node)
+        return new_query_candidate
+
+    def set_date_range_filter(self, target_date, from_relation_node, to_relation_node):
+        self.date_range_filter = DateRangeFilter(target_date, from_relation_node, to_relation_node)
+
+
     def set_new_extension(self, candidate_node):
         self.extension_history.append(candidate_node)
         self.current_extension = candidate_node
@@ -640,6 +670,10 @@ class QueryCandidate:
             for var in query_vars:
                 for node_str in node_strs:
                     filters.append('%s != %s' % (var, node_str))
+
+            if self.date_range_filter:
+                filters.append(str(self.date_range_filter))
+
             triples_string += ' .\n FILTER (%s)' % (' && '.join(filters))
 
         # If the query asks for a query count and the target relation is not already

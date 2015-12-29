@@ -1019,8 +1019,8 @@ class QueryCandidateExtender:
         date_relations = [r for r in relations if self.relation_has_date_target(r)]
         from_relations = [r for r in date_relations if "from" in r.split(".")[-1] or "start" in r.split(".")[-1]]
         to_relations = [r for r in date_relations if "to" in r.split(".")[-1] or "end" in r.split(".")[-1]]
-        logger.info(from_relations)
-        logger.info(to_relations)
+        date_entities = set(entity for entity in query_candidate.query.identified_entities
+                            if isinstance(entity, DateValue))
 
         # Filled mediator relation slots.
         filled_rev_rel_slots = {self.reverse_relations[r.name] for r in
@@ -1063,6 +1063,11 @@ class QueryCandidateExtender:
                                                              query_candidate)
                 new_query_candidate.matches_answer_type = at_match
                 query_candidates.append(new_query_candidate)
+                if to_relations and from_relations and date_entities:
+                    query_candidates.append(self.extend_mediator_with_daterange(new_query_candidate,
+                                                                                date_entities,
+                                                                                to_relations[0],
+                                                                                from_relations[0]))
                 matched_via_token = True
         # Only match via counts when no match via tokens was possible.
         if not matched_via_token:
@@ -1096,7 +1101,18 @@ class QueryCandidateExtender:
                 query_candidates.append(new_query_candidate)
                 query_candidate.target_nodes = [
                     new_query_candidate.current_extension]
+                if to_relations and from_relations and date_entities:
+                    query_candidates.append(self.extend_mediator_with_daterange(new_query_candidate,
+                                                                                date_entities,
+                                                                                to_relations[0],
+                                                                                from_relations[0]))
         return query_candidates
+
+    def extend_mediator_with_daterange(self, query_candidate, date_entities, to_relation, from_relation):
+        new_query_candidate = query_candidate.extend_with_date_range_filter(from_relation, to_relation, list(date_entities)[0])
+        logger.info(new_query_candidate.to_sparql_query())
+        return new_query_candidate
+
 
     def extend_candidate_with_type_filter(self, query_candidate):
         """
