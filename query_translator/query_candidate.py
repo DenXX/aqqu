@@ -389,7 +389,7 @@ class QueryCandidate:
         # The query result should have one row with one column which is a
         # number as result or 0 rows
         try:
-            if len(query_result) > 0:
+            if query_result is not None and len(query_result) > 0:
                 result = int(query_result[0][0])
             else:
                 result = 0
@@ -412,7 +412,8 @@ class QueryCandidate:
         :return:
         """
         sparql_query = self.to_sparql_query(include_name=include_name)
-        return self.sparql_backend.query_json(sparql_query)
+        res = self.sparql_backend.query_json(sparql_query)
+        return res if res is not None else []
 
     def get_results_text(self):
         if self.query_results is not None:
@@ -532,13 +533,12 @@ class QueryCandidate:
     def extend_with_date_range_filter(self, from_relation, to_relation, target_date):
         new_query_candidate = copy.deepcopy(self)
         mediator_node = new_query_candidate.extension_history[-2]
-        date_entity_match = EntityMatch(target_date)
         date_node = QueryCandidateNode(target_date.entity.value, target_date, new_query_candidate)
         from_date_node = QueryCandidateVariable(new_query_candidate)
         from_relation_node = QueryCandidateRelation(from_relation, new_query_candidate, mediator_node, from_date_node)
         to_date_node = QueryCandidateVariable(new_query_candidate)
         to_relation_node = QueryCandidateRelation(to_relation, new_query_candidate, mediator_node, to_date_node)
-        new_query_candidate.add_entity_match(date_entity_match)
+        new_query_candidate.add_entity_match(EntityMatch(target_date))
         new_query_candidate.set_date_range_filter(date_node, from_date_node, to_date_node)
         return new_query_candidate
 
