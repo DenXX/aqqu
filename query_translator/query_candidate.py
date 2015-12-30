@@ -264,8 +264,10 @@ class DateRangeFilter:
         self.date_node = date_node
 
     def __repr__(self):
-        return "year(xsd:date(%s)) <= year(xsd:date(%s)) && year(xsd:date(%s)) <= year(xsd:date(%s))" % (
+        return "(!BOUND(%s) || year(xsd:date(%s)) <= year(xsd:date(%s))) && (!BOUND(%s) || year(xsd:date(%s)) <= year(xsd:date(%s)))" % (
+            self.from_var.get_sparql_name(),
             self.from_var.get_sparql_name(), self.date_node.get_sparql_name(),
+            self.to_var.get_sparql_name(),
             self.date_node.get_sparql_name(), self.to_var.get_sparql_name())
 
 
@@ -535,9 +537,9 @@ class QueryCandidate:
         mediator_node = new_query_candidate.extension_history[-2]
         date_node = QueryCandidateNode(target_date.entity.value, target_date, new_query_candidate)
         from_date_node = QueryCandidateVariable(new_query_candidate)
-        from_relation_node = QueryCandidateRelation(from_relation, new_query_candidate, mediator_node, from_date_node)
+        from_relation_node = QueryCandidateRelation(from_relation, new_query_candidate, mediator_node, from_date_node, optional=True)
         to_date_node = QueryCandidateVariable(new_query_candidate)
-        to_relation_node = QueryCandidateRelation(to_relation, new_query_candidate, mediator_node, to_date_node)
+        to_relation_node = QueryCandidateRelation(to_relation, new_query_candidate, mediator_node, to_date_node, optional=True)
         new_query_candidate.add_entity_match(EntityMatch(target_date))
         new_query_candidate.set_date_range_filter(date_node, from_date_node, to_date_node)
         return new_query_candidate
@@ -616,11 +618,11 @@ class QueryCandidate:
         query_prefix = "PREFIX %s: <%s>\n" % (globals.FREEBASE_SPARQL_PREFIX,
                                               globals.FREEBASE_NS_PREFIX)
         sparql_triples = self.root_node.to_sparql_query_triples(visited)
-        triples_string = ' .\n '.join(["%s %s %s" % (
+        triples_string = ' .\n '.join([("OPTIONAL { " if optional else "") + "%s %s %s" % (
         s.get_prefixed_sparql_name(globals.FREEBASE_SPARQL_PREFIX),
         p.get_prefixed_sparql_name(globals.FREEBASE_SPARQL_PREFIX),
-        o.get_prefixed_sparql_name(globals.FREEBASE_SPARQL_PREFIX))
-                                       for s, p, o in sparql_triples])
+        o.get_prefixed_sparql_name(globals.FREEBASE_SPARQL_PREFIX)) + (" } " if optional else "")
+                                       for s, p, o, optional in sparql_triples])
         query_vars = []
         if targets:
             query_vars = [var.get_sparql_name() for
@@ -630,7 +632,7 @@ class QueryCandidate:
                           var in self.target_nodes]
         else:
             var_nodes = []
-            for s, p, o in sparql_triples:
+            for s, p, o, _ in sparql_triples:
                 if isinstance(s, QueryCandidateVariable):
                     var_nodes.append(s)
                 elif isinstance(o, QueryCandidateVariable):
@@ -661,7 +663,7 @@ class QueryCandidate:
         if filter_target:
             node_strs = set()
             filters = []
-            for s, p, o in sparql_triples:
+            for s, p, o, _ in sparql_triples:
                 if not isinstance(s, QueryCandidateVariable):
                     node_strs.add(s.get_prefixed_sparql_name(
                         globals.FREEBASE_SPARQL_PREFIX))
@@ -719,11 +721,11 @@ class QueryCandidate:
         query_prefix = "PREFIX %s: <%s>\n" % (globals.FREEBASE_SPARQL_PREFIX,
                                               globals.FREEBASE_NS_PREFIX)
         sparql_triples = self.root_node.to_sparql_query_triples(visited)
-        triples_string = ' .\n '.join(["%s %s %s" % (
+        triples_string = ' .\n '.join([("OPTIONAL { " if optional else "") + "%s %s %s" % (
         s.get_prefixed_sparql_name(globals.FREEBASE_SPARQL_PREFIX),
         p.get_prefixed_sparql_name(globals.FREEBASE_SPARQL_PREFIX),
-        o.get_prefixed_sparql_name(globals.FREEBASE_SPARQL_PREFIX))
-                                       for s, p, o in sparql_triples])
+        o.get_prefixed_sparql_name(globals.FREEBASE_SPARQL_PREFIX)) + (" } " if optional else "")
+                                       for s, p, o, optional in sparql_triples])
         extension_triple = "%s %s %s" % (
         subject.get_prefixed_sparql_name(globals.FREEBASE_SPARQL_PREFIX),
         predicate.get_prefixed_sparql_name(globals.FREEBASE_SPARQL_PREFIX),
@@ -872,7 +874,7 @@ class QueryCandidateNode:
                 logger.warn(
                     "Relation %s in the query graph misses a target node." % r.name)
                 continue
-            triples.append((self, r, r.target_node))
+            triples.append((self, r, r.target_node, r.optional))
         visited.add(self)
         # Recursively create query:
         for r in self.out_relations:
@@ -950,7 +952,7 @@ class QueryCandidateRelation(QueryCandidateNode):
     it is a special kind of Node.
     """
 
-    def __init__(self, name, query_candidate, source_node, target_node):
+    def __init__(self, name, query_candidate, source_node, target_node, optional=False):
         QueryCandidateNode.__init__(self, name, name, query_candidate)
         self.relation_match = None
         self.entity_match = None
@@ -959,6 +961,7 @@ class QueryCandidateRelation(QueryCandidateNode):
         self.target_node = target_node
         self.reversed = False
         self.score = None
+        self.optional = optional
         if self.query_candidate is not None:
             self.query_candidate.relations.append(self)
 
