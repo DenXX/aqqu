@@ -60,6 +60,7 @@ class KBEntity(Entity):
     _entity_descriptions = None
     _entity_ids = None
     _entity_counts = None
+    _notable_types = None
 
     def __init__(self, name, identifier, score, aliases):
         Entity.__init__(self, name)
@@ -109,6 +110,13 @@ class KBEntity(Entity):
         return filter(lambda x: x, [KBEntity.get_entity_description(entity_id)
                                     for entity_id in KBEntity.get_entityid_by_name(name,
                                                                                    keep_most_triples=keep_most_triples_only)])
+
+    def get_notable_type(self):
+        if KBEntity._notable_types is None:
+            KBEntity._read_notable_types()
+        if self.id in self._notable_types:
+            return self._notable_types[self.id]
+        return ""
 
     def sparql_name(self):
         return self.id
@@ -169,6 +177,33 @@ class KBEntity(Entity):
                     mid = fields[1].split('/')[-1][:-1]
                     count = int(fields[0])
                     KBEntity._entity_counts[mid] = count
+
+    @staticmethod
+    def _read_notable_types():
+        if KBEntity._notable_types is None:
+            import globals
+            import gzip
+            types_file = globals.config.get('EntityLinker', 'notable-types-file')
+            KBEntity._notable_types = dict()
+            logger.info("Reading notable types...")
+            with gzip.open(types_file, 'r') as input_file:
+                for index, line in enumerate(input_file):
+                    triple = KBEntity.parse_freebase_triple(line)
+                    if triple is not None:
+                        mid = triple[0]
+                        notable_type = triple[2]
+                        if mid not in KBEntity._notable_types:
+                            KBEntity._notable_types[mid] = notable_type
+
+    @staticmethod
+    def parse_freebase_triple(triple_string):
+        line = triple_string.decode('utf-8').strip().split('\t')
+        if len(line) > 2:
+            mid = line[0].split('/')[-1][:-1]
+            predicate = line[1]
+            obj = line[2].split('/')[-1][:-1]
+            return mid, predicate, obj
+        return None
 
     @staticmethod
     def parse_freebase_string_triple(triple_string):

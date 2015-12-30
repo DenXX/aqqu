@@ -185,10 +185,20 @@ def get_question_terms():
 if __name__ == "__main__":
     #get_number_of_external_entities()
 
-    get_question_terms()
+    # get_question_terms()
+
+    globals.read_configuration('config.cfg')
+    linker = globals.get_entity_linker()
+    parser = globals.get_parser()
+    while True:
+        print "Enter text: "
+        line = sys.stdin.readline()
+        tokens = parser.parse(line).tokens
+        for en in linker.identify_entities_in_tokens(tokens, line):
+            print en.entity.id, en.entity.get_notable_type()
 
 
-    # main()
+    # test_new_entity_linker()
     # main_entities()  # For entity linking from SERP for a question
     # main_entity_link_text()  # For entity linking from arbitrary text
     # entity_link_snippets()
