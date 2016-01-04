@@ -288,6 +288,7 @@ class AccuModel(MLModel, Ranker):
 
             # Create an example for pruning classifier.
             if self.use_pruning:
+                self.prune_feature_extractor.relation_score_model = rel_model
                 testfold_features, testfold_labels = construct_examples(
                     test_fold,
                     self.prune_feature_extractor)
