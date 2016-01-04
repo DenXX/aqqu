@@ -14,7 +14,7 @@ from query_translator.evaluation import load_eval_queries
 
 import logging
 
-from query_translator.features import get_n_grams, FeatureExtractor
+from query_translator.features import FeatureExtractor, get_grams_feats
 from query_translator.learner import get_evaluated_queries
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s '
@@ -41,7 +41,7 @@ def train_type_model():
         queries = get_evaluated_queries(dataset, True, parameters)
         for index, query in enumerate(queries):
             tokens = [token.lemma for token in parser.parse(query.utterance).tokens]
-            n_grams = get_n_grams(tokens)
+            n_grams = get_grams_feats(tokens)
 
             answer_entities = [mid for answer in query.target_result
                                for mid in KBEntity.get_entityid_by_name(answer, keep_most_triples=True)]
