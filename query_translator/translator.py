@@ -6,6 +6,8 @@ Copyright 2015, University of Freiburg.
 Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 
 """
+import sys
+
 from entity_linker.entity_linker import EntityLinker
 from answer_type import AnswerTypeIdentifier
 from pattern_matcher import QueryCandidateExtender, QueryPatternMatcher, get_content_tokens
@@ -60,12 +62,14 @@ class QueryTranslator(object):
                  query_extender,
                  entity_linker,
                  parser,
-                 scorer_obj):
+                 scorer_obj,
+                 notable_types_model=None):
         self.sparql_backend = sparql_backend
         self.query_extender = query_extender
         self.entity_linker = entity_linker
         self.parser = parser
         self.scorer = scorer_obj
+        self.notable_types_model = notable_types_model
         self.query_extender.set_parameters(scorer_obj.get_parameters())
 
     @staticmethod
@@ -76,8 +80,13 @@ class QueryTranslator(object):
         entity_linker = globals.get_entity_linker()
         parser = globals.get_parser()
         scorer_obj = ranker.SimpleScoreRanker('DefaultScorer')
+        notable_types_model_path = config_params.get('QueryCandidateExtender', 'notable-types-model', '')
+        notable_types_model = None
+        if notable_types_model_path and sys.path.exists(notable_types_model_path):
+            import cPickle as pickle
+            notable_types_model = pickle.load(notable_types_model_path)
         return QueryTranslator(sparql_backend, query_extender,
-                               entity_linker, parser, scorer_obj)
+                               entity_linker, parser, scorer_obj, notable_types_model)
 
     def set_scorer(self, scorer):
         """Sets the parameters of the translator.
@@ -126,7 +135,27 @@ class QueryTranslator(object):
         ermrert_matches = pattern_matcher.match_ERMRERT_pattern()
         duration = (time.time() - start_time) * 1000
         logging.info("Total translation time: %.2f ms." % duration)
-        return ert_matches + ermrt_matches + ermrert_matches
+        candidates = ert_matches + ermrt_matches + ermrert_matches
+        candidates = self.extend_candidates(candidates)
+        return candidates
+
+    def extend_candidates(self, candidates):
+        """
+        Extend the set of candidates with addition query candidates, which can be based on existing candidates.
+        For example, one way to extend is to add candidates containing additional filters, e.g. by notable type.
+        :param candidates: A set of candidates to extend.
+        :return: A new set of candidates.
+        """
+        extra_candidates = []
+        if self.notable_types_model:
+            pass
+            # from query_translator.features import FeatureExtractor
+            # feature_extractor = FeatureExtractor(False, False, n_gram_types_features=True)
+            # for candidate in candidates:
+            #     features = feature_extractor.extract_features(candidate)
+            #     # notable_types = candidate.get_answer_notable_types()
+            #     continue
+        return candidates + extra_candidates
 
     def parse_and_identify_entities(self, query_text):
         """
@@ -162,7 +191,7 @@ class QueryTranslator(object):
         """
         TranslationResult = collections.namedtuple('TranslationResult',
                                                    ['query_candidate',
-                                                    'query_result_rows'],
+                                                    'query_results_str'],
                                                    verbose=False)
         # Parse query.
         results = []
@@ -184,9 +213,9 @@ class QueryTranslator(object):
         if len(ranked_candidates) > n_top:
             logger.info("Truncating returned candidates to %s." % n_top)
         for query_candidate in ranked_candidates[:n_top]:
-            query_result = query_candidate.get_result(include_name=True)
-            n_total_results += sum([len(rows) for rows in query_result])
-            result = TranslationResult(query_candidate, query_result)
+            query_results_str = query_candidate.get_results_text()
+            n_total_results += len(query_results_str)
+            result = TranslationResult(query_candidate, query_results_str)
             results.append(result)
         # This assumes that each query candidate uses the same SPARQL backend
         # instance which should be the case at the moment.
@@ -197,7 +226,6 @@ class QueryTranslator(object):
                                                   result_fetch_time, avg_result_fetch_time))
         logger.info("Done translating and executing: %s." % query)
         return results
-
 
 class TranslatorParameters(object):
 

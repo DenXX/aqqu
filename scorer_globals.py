@@ -58,6 +58,12 @@ def init():
                                      "webquestions_split_train",
                                      top_ngram_percentile=5,
                                      rel_regularization_C=1.0),
+
+                   ranker.AccuModel('WQ_Ranker_Types_Dev',
+                                     "webquestions_split_train",
+                                     top_ngram_percentile=5,
+                                     rel_regularization_C=1.0),
+
                    ranker.AccuModel('WQ_Ranker_NoPruning_Dev',
                                      "webquestions_split_train",
                                      top_ngram_percentile=5,

@@ -318,10 +318,14 @@ class QueryCandidate:
         self.cached_result_count = -1
         # An indicator whether the candidate matches the answer type
         self.matches_answer_type = None
+        # Result of the given query
         self.query_results = None
-        self.features = None
-        self.feature_extractor = None
+        # Notable types of answer entities.
+        self.answer_notable_types = None
+        # Filter on date range
         self.date_range_filter = None
+        # Filter based on results notable type.
+        self.type_filter = None
 
     def __unicode__(self):
         return u','.join(self.get_entity_names()) +\
@@ -330,7 +334,8 @@ class QueryCandidate:
     def __str__(self):
         return ','.join(name.encode('utf-8') for name in self.get_entity_names()) +\
                '[' + ','.join(name.encode('utf-8') for name in self.get_relation_names()) + '] ' +\
-               ','.join(token.token.encode('utf-8') for token in self.matched_tokens)
+               ','.join(token.token.encode('utf-8') for token in self.matched_tokens) +\
+               (" > type filter: %s" % self.type_filter if self.type_filter else "")
 
     def __repr__(self):
         return str(self)
@@ -340,6 +345,21 @@ class QueryCandidate:
 
     def get_entity_names(self):
         return sorted([me.entity.name for me in self.matched_entities])
+
+    def get_answer_notable_types(self):
+        """
+        Returns a list of notable types of each of the result entities.
+        :return:
+        """
+        if self.answer_notable_types is None:
+            self.answer_notable_types = []
+            for answer in self.get_results_text():
+                mid = KBEntity.get_entityid_by_name(answer, keep_most_triples=True)
+                if mid:
+                    self.answer_notable_types.append(KBEntity.get_notable_types(mid[0]))
+                else:
+                    self.answer_notable_types.append([])
+        return self.answer_notable_types
 
     def get_entity_scores(self):
         entities = sorted([me.entity for me in self.matched_entities])
@@ -357,8 +377,6 @@ class QueryCandidate:
         d = dict(self.__dict__)
         del d['sparql_backend']
         del d['extension_history']
-        del d['features']
-        del d['feature_extractor']
         return d
 
     def __setstate__(self, d):
@@ -370,12 +388,12 @@ class QueryCandidate:
         self.__dict__.update(d)
         self.sparql_backend = None
         self.extension_history = []
-        self.features = None
-        self.feature_extractor = None
-
-    def clear_features(self):
-        self.features = None
-        self.feature_extractor = None
+        if 'answer_notable_types' not in d:
+            self.answer_notable_types = None
+        if 'date_range_filter' not in d:
+            self.date_range_filter = None
+        if 'type_filter' not in d:
+            self.type_filter = None
 
     def get_result_count(self, use_cached_value=True):
         """
@@ -386,25 +404,30 @@ class QueryCandidate:
         """
         if use_cached_value and self.cached_result_count > -1:
             return self.cached_result_count
-        sparql_query = self.to_sparql_query(count_query=True)
-        query_result = self.sparql_backend.query_json(sparql_query)
-        # The query result should have one row with one column which is a
-        # number as result or 0 rows
-        try:
-            if query_result is not None and len(query_result) > 0:
-                result = int(query_result[0][0])
-            else:
+
+        if self.type_filter is None:
+            sparql_query = self.to_sparql_query(count_query=True)
+            query_result = self.sparql_backend.query_json(sparql_query)
+            # The query result should have one row with one column which is a
+            # number as result or 0 rows
+            try:
+                if query_result is not None and len(query_result) > 0:
+                    result = int(query_result[0][0])
+                else:
+                    result = 0
+            except ValueError:
                 result = 0
-        except ValueError:
-            result = 0
-            logger.warn(
-                "Count query returned funky value: %s." % query_result[0][0])
-        # For count queries only check if there is a count or not.
-        if self.query.is_count_query:
-            if result > 1:
-                result = 1
-        self.cached_result_count = result
-        return result
+                logger.warn(
+                    "Count query returned funky value: %s." % query_result[0][0])
+            # For count queries only check if there is a count or not.
+            if self.query.is_count_query:
+                if result > 1:
+                    result = 1
+            self.cached_result_count = result
+            return result
+        else:
+            self.cached_result_count = len(self.get_results_text())
+            return self.cached_result_count
 
     def get_result(self, include_name=True):
         """
@@ -415,6 +438,7 @@ class QueryCandidate:
         """
         sparql_query = self.to_sparql_query(include_name=include_name)
         res = self.sparql_backend.query_json(sparql_query)
+        assert self.type_filter is None
         return res if res is not None else []
 
     def get_results_text(self):
@@ -428,6 +452,14 @@ class QueryCandidate:
             else:
                 self.query_results.append(r[0])
         return self.query_results
+
+    def filter_answers_by_type(self, type_filter):
+        assert self.type_filter is None
+        self.query_results = filter(lambda result: KBEntity.get_notable_type_by_name(result) == type_filter,
+                                    self.get_results_text())
+        self.type_filter = type_filter
+        self.cached_result_count = len(self.query_results)
+        return self.get_results_text()
 
     def get_relation_suggestions(self):
         """
@@ -446,21 +478,6 @@ class QueryCandidate:
         if result:
             relations_list = [c for r in result for c in r]
         return relations_list
-
-    def get_answers_notable_types(self):
-        """
-        Returns notable types of all answers returned by the query.
-        """
-        query_current_extension = self.current_extension
-        o = QueryCandidateVariable(None, name='o')
-        p = QueryCandidateRelation(globals.FREEBASE_NOTABLE_TYPE_RELATION, None, None, o)
-        query = self._to_extended_sparql_query(query_current_extension, p, o, [o])
-        result = self.sparql_backend.query(query)
-        notable_types_list = []
-        # Flatten the list.
-        if result:
-            notable_types_list = [c for r in result for c in r]
-        return notable_types_list
 
     def get_next_var(self):
         """
@@ -1001,6 +1018,10 @@ class QueryCandidateRelation(QueryCandidateNode):
     def __repr__(self):
         return unicode(self)
 
+    def __setstate__(self, d):
+        self.__dict__.update(d)
+        if 'optional' not in d:
+            self.optional = False
 
 def test():
     query = Query("some test query")

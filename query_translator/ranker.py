@@ -184,6 +184,7 @@ class AccuModel(MLModel, Ranker):
         self.correct_index = -1
         self.cmp_cache = dict()
         self.relation_scorer = None
+        self.type_scorer = None
         self.pruner = None
         self.scaler = None
         self.kwargs = kwargs
@@ -226,11 +227,17 @@ class AccuModel(MLModel, Ranker):
                                                     self.rel_regularization_C,
                                                     percentile=self.top_ngram_percentile)
             relation_scorer.load_model()
+
+            type_scorer = TypeNgramScorer(self.get_model_name(), self.rel_regularization_C,
+                                          percentile=self.top_ngram_percentile)
+            type_scorer.load_model()
             self.feature_extractor.relation_score_model = relation_scorer
+            self.feature_extractor.type_score_model = type_scorer
 
             # Load pruning model if needed
             if self.use_pruning:
                 self.prune_feature_extractor.relation_score_model = relation_scorer
+                self.prune_feature_extractor.type_score_model = type_scorer
                 pruner = CandidatePruner(self.get_model_name(),
                                      self.prune_feature_extractor)
                 pruner.load_model()
@@ -243,6 +250,12 @@ class AccuModel(MLModel, Ranker):
         except IOError:
             logger.warn("Model file %s could not be loaded." % model_file)
             raise
+
+    def learn_type_score_model(self, queries):
+        type_model = TypeNgramScorer(self.get_model_name(), self.rel_regularization_C,
+                                     percentile=self.top_ngram_percentile)
+        type_model.learn_model(queries)
+        return type_model
 
     def learn_rel_score_model(self, queries):
         if self.use_embedding_relation_model:
@@ -283,11 +296,15 @@ class AccuModel(MLModel, Ranker):
             test_fold = [train_queries[i] for i in test]
             train_fold = [train_queries[i] for i in train]
             rel_model = self.learn_rel_score_model(train_fold)
+            type_model = self.learn_type_score_model(train_fold)
             self.feature_extractor.relation_score_model = rel_model
+            self.feature_extractor.type_score_model = type_model
             logger.info("Applying relation score model.")
 
             # Create an example for pruning classifier.
             if self.use_pruning:
+                self.prune_feature_extractor.type_score_model = type_model
+                self.prune_feature_extractor.relation_score_model = rel_model
                 testfold_features, testfold_labels = construct_examples(
                     test_fold,
                     self.prune_feature_extractor)
@@ -302,23 +319,29 @@ class AccuModel(MLModel, Ranker):
             pair_labels.extend(testfoldpair_labels)
             num_fold += 1
             logger.info("Done collecting features for fold.")
-        logger.info("Training final relation scorer.")
+        logger.info("Training final relation and type scorer.")
         rel_model = self.learn_rel_score_model(train_queries)
         self.feature_extractor.relation_score_model = rel_model
-        self.relation_scorer = rel_model
+        type_model = self.learn_type_score_model(train_queries)
+        self.feature_extractor.type_score_model = type_model
 
-        logger.info("Saving prune and ranking training datasets...")
-        with open(globals.config.get('WebSearchFeatures', 'prune-dataset-file'), 'w') as out:
-            for label, feature in zip(labels, features):
-                pickle.dump((label, feature), out)
-        with open(globals.config.get('WebSearchFeatures', 'rank-dataset-file'), 'w') as out:
-            for label, feature in zip(pair_labels, pair_features):
-                pickle.dump((label, feature), out)
-        logger.info("Saving prune and ranking training datasets done!")
+        if self.use_pruning:
+            self.prune_feature_extractor.relation_score_model = rel_model
+            self.prune_feature_extractor.type_score_model = type_model
+        self.relation_scorer = rel_model
+        self.type_scorer = type_model
+
+        # logger.info("Saving prune and ranking training datasets...")
+        # with open(globals.config.get('WebSearchFeatures', 'prune-dataset-file'), 'w') as out:
+        #     for label, feature in zip(labels, features):
+        #         pickle.dump((label, feature), out)
+        # with open(globals.config.get('WebSearchFeatures', 'rank-dataset-file'), 'w') as out:
+        #     for label, feature in zip(pair_labels, pair_features):
+        #         pickle.dump((label, feature), out)
+        # logger.info("Saving prune and ranking training datasets done!")
 
         # Train pruning model if needed.
         if self.use_pruning:
-            self.prune_feature_extractor.relation_score_model = rel_model
             self.pruner = self.learn_prune_model(labels, features)
 
         self.learn_ranking_model(pair_features, pair_labels)
@@ -378,6 +401,7 @@ class AccuModel(MLModel, Ranker):
                      self.dict_vec, self.scaler],
                     self.get_model_filename())
         self.relation_scorer.store_model()
+        self.type_scorer.store_model()
 
         # Store pruning model if needed.
         if self.use_pruning:
@@ -754,6 +778,7 @@ class RelationNgramScorer(MLModel):
         score = prob[0][self.correct_index]
         return RankScore(score)
 
+
 class EmbeddingRelationModel(MLModel):
     """Learns a scoring based on question ngrams."""
 
@@ -868,6 +893,138 @@ class EmbeddingRelationModel(MLModel):
             return RankScore(score)
         except ValueError:
             return RankScore(0.0)
+
+
+# TODO(denxx): Need to unify this and relation score model.
+class TypeNgramScorer(MLModel):
+    """Learns a scoring based on question ngrams and answer notable types."""
+
+    def __init__(self,
+                 name,
+                 regularization_C,
+                 percentile=None):
+        name += self.get_suffix()
+        MLModel.__init__(self, name, None)
+        # Note: The model is lazily when needed.
+        self.model = None
+        self.regularization_C = regularization_C
+        self.top_percentile = percentile
+        self.label_encoder = None
+        self.dict_vec = None
+        self.scaler = None
+        # The index of the correct label.
+        self.correct_index = -1
+        self.feature_extractor = FeatureExtractor(False,
+                                                  False,
+                                                  n_gram_types_features=True,
+                                                  entity_features=False)
+
+    def get_suffix(self):
+        return "_TypeScore"
+
+    def load_model(self):
+        model_file = self.get_model_filename()
+        try:
+            [model, label_enc, dict_vec, scaler] \
+                = joblib.load(model_file)
+            self.model = model
+            self.dict_vec = dict_vec
+            self.scaler = scaler
+            self.label_encoder = label_enc
+            self.correct_index = label_enc.transform([1])[0]
+            logger.info("Loaded scorer model from %s" % model_file)
+        except IOError:
+            logger.warn("Model file %s could not be loaded." % model_file)
+            raise
+
+    def learn_model(self, train_queries):
+        if self.top_percentile:
+            logger.info("Collecting frequent n-gram features...")
+            n_grams_dict = get_top_chi2_candidate_ngrams(train_queries,
+                                                         self.feature_extractor,
+                                                         percentile=self.top_percentile)
+            logger.info("Collected %s n-gram features" % len(n_grams_dict))
+            self.feature_extractor.ngram_dict = n_grams_dict
+        features, labels = construct_examples(train_queries,
+                                              self.feature_extractor)
+        logger.info("#of labeled examples: %s" % len(features))
+        logger.info("#labels non-zero: %s" % sum(labels))
+        label_encoder = LabelEncoder()
+        logger.info(features[-1])
+        labels = label_encoder.fit_transform(labels)
+        vec = DictVectorizer(sparse=True)
+        scaler = StandardScaler(with_mean=False)
+        X = vec.fit_transform(features)
+        X = scaler.fit_transform(X)
+        X, labels = utils.shuffle(X, labels, random_state=999)
+        logger.info("#Features: %s" % len(vec.vocabulary_))
+        # Perform grid search or use provided C.
+        if self.regularization_C is None:
+            logger.info("Performing grid search.")
+            type_scorer = SGDClassifier(loss='log', class_weight='auto',
+                                            n_iter=np.ceil(
+                                                10 ** 6 / len(labels)),
+                                            random_state=999)
+            cv_params = [{"alpha": [10.0, 5.0, 2.0, 1.5, 1.0, 0.5,
+                                    0.1, 0.01, 0.001, 0.0001]}]
+            grid_search_cv = grid_search.GridSearchCV(type_scorer,
+                                                      cv_params,
+                                                      n_jobs=8,
+                                                      verbose=1,
+                                                      cv=8,
+                                                      refit=True)
+            grid_search_cv.fit(X, labels)
+            logger.info("Best score: %.5f" % grid_search_cv.best_score_)
+            logger.info("Best params: %s" % grid_search_cv.best_params_)
+            self.model = grid_search_cv.best_estimator_
+        else:
+            logger.info("Learning relation scorer with C: %s."
+                        % self.regularization_C)
+            n_iter = np.ceil(10**6 / len(labels))
+            if n_iter == 0:
+                n_iter = 100
+            type_scorer = SGDClassifier(loss='log', class_weight='auto',
+                                            n_iter=n_iter,
+                                            alpha=self.regularization_C,
+                                            random_state=999)
+            type_scorer.fit(X, labels)
+            logger.info("Done.")
+            self.model = type_scorer
+        self.dict_vec = vec
+        self.scaler = scaler
+        self.label_encoder = label_encoder
+        self.correct_index = label_encoder.transform([1])[0]
+        self.print_model()
+
+    def print_model(self, n_top=20):
+        dict_vec = self.dict_vec
+        classifier = self.model
+        logger.info("Printing top %s weights." % n_top)
+        logger.info("intercept: %.4f" % classifier.intercept_[0])
+        feature_weights = []
+        for name, index in dict_vec.vocabulary_.iteritems():
+            feature_weights.append((name, classifier.coef_[0][index]))
+        feature_weights = sorted(feature_weights, key=lambda x: math.fabs(x[1]),
+                                 reverse=True)
+        for name, weight in feature_weights[:n_top]:
+            logger.info("%s: %.4f" % (name, weight))
+
+    def store_model(self):
+        logger.info("Writing model to %s." % self.get_model_filename())
+        joblib.dump([self.model, self.label_encoder,
+                     self.dict_vec, self.scaler], self.get_model_filename())
+        logger.info("Done.")
+
+    def score(self, candidate):
+        if not self.model:
+            self.load_model()
+        features = self.feature_extractor.extract_features(candidate)
+        X = self.dict_vec.transform(features)
+        X = self.scaler.transform(X)
+        prob = self.model.predict_proba(X)
+        # Prob is an array of n_examples, n_classes
+        score = prob[0][self.correct_index]
+        return RankScore(score)
 
 
 class SimpleScoreRanker(Ranker):

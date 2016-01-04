@@ -44,7 +44,11 @@ def get_n_grams_features(candidate, include_skip_grams=False):
     :param candidate:
     :return:
     """
-    query_text_tokens = [x.lower() for x in get_query_text_tokens(candidate)]
+    return get_grams_feats(get_query_text_tokens(candidate, include_skip_grams))
+
+
+def get_grams_feats(tokens, include_skip_grams=False):
+    query_text_tokens = [x.lower() for x in tokens]
     # First get bi-grams.
     n_grams = get_n_grams(query_text_tokens, n=2)
     # Then get uni-grams.
@@ -102,7 +106,9 @@ class FeatureExtractor(object):
     def __init__(self,
                  generic_features,
                  n_gram_features,
+                 n_gram_types_features=False,
                  relation_score_model=None,
+                 type_score_model=None,
                  entity_features=True,
                  embedding_question_features=False,
                  text_features=False,
@@ -110,12 +116,14 @@ class FeatureExtractor(object):
                  clueweb_features=False):
         self.generic_features = generic_features
         self.n_gram_features = n_gram_features
+        self.n_gram_types_features = n_gram_types_features
         # If we use n-gram features this is set before to determine relevant
         # n-grams.
         self.ngram_dict = None
         # If this is provided each candidate is scored using this model
         # and the resulting score is added as an extracted feature.
         self.relation_score_model = relation_score_model
+        self.type_score_model = type_score_model
         self.entity_features = entity_features
         self.text_feature_generator = None
         self.generate_embedding_question_features = embedding_question_features
@@ -316,12 +324,17 @@ class FeatureExtractor(object):
         #     })
 
         if self.n_gram_features:
-            features.update(self.extract_ngram_features(candidate))
+            features.update(self.extract_ngram_relation_features(candidate))
+        if self.n_gram_types_features:
+            features.update(self.extract_ngram_notabletype_features(candidate))
         if self.generate_embedding_question_features:
             features.update(get_embedding_features(candidate))
         if self.relation_score_model:
             rank_score = self.relation_score_model.score(candidate)
             features['relation_score'] = rank_score.score
+        if self.type_score_model:
+            type_score = self.type_score_model.score(candidate)
+            features['type_score'] = type_score.score
 
         # Generate web search results, cqa and clueweb-based features.
         if self.generate_text_features:
@@ -339,20 +352,34 @@ class FeatureExtractor(object):
         # candidate.feature_extractor = self
         return features
 
-    def extract_ngram_features(self, candidate, include_skip_grams=False):
+    def extract_ngram_relation_features(self, candidate, include_skip_grams=False):
         """Extract ngram features from the single candidate.
 
         :param candidate:
         :return:
         """
-        ngram_features = dict()
         relations = '_'.join(sorted(candidate.get_relation_names()))
         n_grams = get_n_grams_features(candidate, include_skip_grams)
+        return self.extract_ngram_features(n_grams, [relations, ], "rel")
+
+    def extract_ngram_notabletype_features(self, candidate):
+        """Extract ngram features from the single candidate.
+
+        :param candidate:
+        :return:
+        """
+        notable_types = set(type for types in candidate.get_answer_notable_types() for type in types if type)
+        n_grams = get_n_grams_features(candidate)
+        return self.extract_ngram_features(n_grams, notable_types, "type")
+
+    def extract_ngram_features(self, n_grams, labels, label_prefix):
+        ngram_features = dict()
         for ng in n_grams:
-            # Ignore ngrams that only consist of stopfwords.
+            # Ignore ngrams that only consist of stopwords.
             if set(ng).issubset(N_GRAM_STOPWORDS):
                 continue
-            f_name = 'rel:%s+word:%s' % (relations, '_'.join(ng))
-            if self.ngram_dict is None or f_name in self.ngram_dict:
-                ngram_features[f_name] = 1
+            for label in labels:
+                f_name = 'word:%s+%s:%s' % ('_'.join(ng), label_prefix, label)
+                if self.ngram_dict is None or f_name in self.ngram_dict:
+                    ngram_features[f_name] = 1
         return ngram_features

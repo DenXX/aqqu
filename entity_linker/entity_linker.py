@@ -131,6 +131,13 @@ class KBEntity(Entity):
             return KBEntity._notable_types[mid]
         return ""
 
+    @staticmethod
+    def get_notable_type_by_name(name):
+        mid = KBEntity.get_entityid_by_name(name, keep_most_triples=True)
+        if mid:
+            return KBEntity.get_notable_types(mid[0])
+        return ""
+
     def sparql_name(self):
         return self.id
 
