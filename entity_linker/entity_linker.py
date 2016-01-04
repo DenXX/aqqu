@@ -59,6 +59,7 @@ class KBEntity(Entity):
     """A KB entity."""
     _entity_descriptions = None
     _entity_ids = None
+    _entity_names = None
     _entity_counts = None
     _notable_types = None
 
@@ -111,11 +112,23 @@ class KBEntity(Entity):
                                     for entity_id in KBEntity.get_entityid_by_name(name,
                                                                                    keep_most_triples=keep_most_triples_only)])
 
-    def get_notable_type(self):
+    def get_main_name(self):
+        return KBEntity.get_entity_name(self.id)
+
+    @staticmethod
+    def get_entity_name(mid):
+        if KBEntity._entity_names is None:
+            KBEntity._read_names()
+        if mid in KBEntity._entity_names:
+            return KBEntity._entity_names[mid]
+        return ""
+
+    @staticmethod
+    def get_notable_types(mid):
         if KBEntity._notable_types is None:
             KBEntity._read_notable_types()
-        if self.id in self._notable_types:
-            return self._notable_types[self.id]
+        if mid in KBEntity._notable_types:
+            return KBEntity._notable_types[mid]
         return ""
 
     def sparql_name(self):
@@ -152,6 +165,7 @@ class KBEntity(Entity):
             import gzip
             descriptions_file = globals.config.get('EntityLinker', 'entity-names-file')
             KBEntity._entity_ids = dict()
+            KBEntity._entity_names = dict()
             logger.info("Reading entity names...")
             with gzip.open(descriptions_file, 'r') as input_file:
                 for index, line in enumerate(input_file):
@@ -161,6 +175,7 @@ class KBEntity(Entity):
                         if name not in KBEntity._entity_ids:
                             KBEntity._entity_ids[name] = []
                         KBEntity._entity_ids[name].append(triple[0])
+                        KBEntity._entity_names[triple[0]] = name
             logger.info("Done reading entity names.")
 
     @staticmethod

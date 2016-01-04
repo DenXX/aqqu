@@ -235,6 +235,34 @@ def init():
                                    extract_clueweb_features_ranking=True,
                                    use_pruning=True),
 
+                  ranker.AccuModel('WQ_Ranker_WithTextCqaCluewebPruneRank_DateRange_RF300',
+                                   "webquestions_train_externalentities_all_daterange",
+                                   top_ngram_percentile=5,
+                                   ranking_algorithm='random_forest',
+                                   ranking_n_estimators=300,
+                                   rel_regularization_C=1.0,
+                                   extract_text_features_pruning=True,
+                                   extract_text_features_ranking=True,
+                                   extract_cqa_features_ranking=True,
+                                   extract_cqa_features_pruning=True,
+                                   extract_clueweb_features_pruning=True,
+                                   extract_clueweb_features_ranking=True,
+                                   use_pruning=True),
+                  ranker.AccuModel('WQ_Ranker_WithTextCqaCluewebPruneRank_DateRange_RF300_Dev',
+                                   "webquestions_split_train_externalentities_all_daterange",
+                                   top_ngram_percentile=5,
+                                   ranking_algorithm='random_forest',
+                                   ranking_n_estimators=300,
+                                   rel_regularization_C=1.0,
+                                   extract_text_features_pruning=True,
+                                   extract_text_features_ranking=True,
+                                   extract_cqa_features_ranking=True,
+                                   extract_cqa_features_pruning=True,
+                                   extract_clueweb_features_pruning=True,
+                                   extract_clueweb_features_ranking=True,
+                                   use_pruning=True),
+
+
                   ranker.AccuModel('WQ_Ranker_WithTextCqaPruneRank_ExtExtAll_RF300_Dev',
                                    "webquestions_split_train_externalentities_all",
                                    top_ngram_percentile=5,
@@ -464,6 +492,21 @@ def init():
          ('webquestions_test_externalentities_all',
           'evaluation-data/'
           'webquestions.test.extent_all.json'),
+
+         # Train and test with external entities and extra date range templates
+         ('webquestions_train_externalentities_all_daterange',
+          'evaluation-data/'
+          'webquestions.train.extent_all_daterange.json'),
+         ('webquestions_test_externalentities_all_daterange',
+          'evaluation-data/'
+          'webquestions.test.extent_all_daterange.json'),
+         ('webquestions_split_train_externalentities_all_daterange',
+          'evaluation-data/'
+          'webquestions.split.train.extent_all_daterange.json'),
+         ('webquestions_split_dev_externalentities_all_daterange',
+          'evaluation-data/'
+          'webquestions.split.dev.extent_all_daterange.json'),
+
 
 
          ('webquestions_split_train_daterange',
