@@ -461,11 +461,12 @@ class QueryCandidate:
                 self.query_results.append(r[0])
         return self.query_results
 
-    def filter_answers_by_type(self, type_filter):
+    def filter_answers_by_type(self, type_filter, score):
         assert self.type_filter is None
         self.query_results = filter(lambda result: KBEntity.get_notable_type_by_name(result) == type_filter,
                                     self.get_results_text())
         self.type_filter = type_filter
+        self.type_filter_npmi = score
         self.cached_result_count = len(self.query_results)
         return self.get_results_text()
 

@@ -169,7 +169,8 @@ class QueryTranslator(object):
                             logger.info(pair)
                             logger.info(self.ngram_notable_types_npmi[pair])
                             new_query_candidate = copy.deepcopy(candidate)
-                            new_query_candidate.filter_answers_by_type(notable_type)
+                            new_query_candidate.filter_answers_by_type(notable_type,
+                                                                       self.ngram_notable_types_npmi[pair])
                             extra_candidates.append(new_query_candidate)
                             logger.info(candidate.get_results_text())
                             logger.info(new_query_candidate.get_results_text())
