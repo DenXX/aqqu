@@ -319,7 +319,7 @@ class AccuModel(MLModel, Ranker):
             pair_labels.extend(testfoldpair_labels)
             num_fold += 1
             logger.info("Done collecting features for fold.")
-        logger.info("Training final relation and type scorer.")
+        logger.info("Training final relation scorer.")
         rel_model = self.learn_rel_score_model(train_queries)
         self.feature_extractor.relation_score_model = rel_model
         type_model = self.learn_type_score_model(train_queries)
