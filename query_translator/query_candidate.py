@@ -372,6 +372,8 @@ class QueryCandidate:
         self.extension_history = []
         self.features = None
         self.feature_extractor = None
+        if 'date_range_filter' not in d:
+            self.date_range_filter = None
 
     def clear_features(self):
         self.features = None
@@ -1001,6 +1003,12 @@ class QueryCandidateRelation(QueryCandidateNode):
     def __repr__(self):
         return unicode(self)
 
+
+    def __setstate__(self, d):
+        self.__dict__.update(d)
+        self.optional = False
+
+    
 
 def test():
     query = Query("some test query")
