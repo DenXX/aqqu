@@ -330,6 +330,7 @@ class QueryCandidate:
         self.date_range_filter = None
         # Filter based on results notable type.
         self.type_filter = None
+        self.type_filter_npmi = None
 
     def __unicode__(self):
         return u','.join(self.get_entity_names()) +\
@@ -400,6 +401,7 @@ class QueryCandidate:
             self.date_range_filter = None
         if 'type_filter' not in d:
             self.type_filter = None
+            self.type_filter_npmi = None
 
     def get_result_count(self, use_cached_value=True):
         """

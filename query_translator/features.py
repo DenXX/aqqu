@@ -297,6 +297,12 @@ class FeatureExtractor(object):
                 'result_size_gt_20': result_size_gt_20,
             })
 
+            if candidate.date_range_filter is not None:
+                features["has_date_range_filter"] = 1
+            if candidate.type_filter is not None:
+                features["has_type_filter"] = 1
+                features["type_filter_npmi_score"] = candidate.type_filter_npmi
+
         # Extra features, not web search based, but potentially useful.
         # if self.generate_extra_features:
         #     plural_nouns = 0
