@@ -1011,6 +1011,7 @@ class QueryCandidateExtender:
         return query_candidates
 
     def extend_mediator_with_targetrelation(self, query_candidate):
+        use_date_range_template = globals.config.get('QueryCandidateExtender', 'date-range-template', "") == "True"
         query_candidates = []
         query = query_candidate.query
         query_mediator_node = query_candidate.current_extension
@@ -1063,7 +1064,7 @@ class QueryCandidateExtender:
                                                              query_candidate)
                 new_query_candidate.matches_answer_type = at_match
                 query_candidates.append(new_query_candidate)
-                if to_relations and from_relations and date_entities and \
+                if use_date_range_template and to_relations and from_relations and date_entities and \
                         all(not em.entity.overlaps(date_entities[0]) for em in new_query_candidate.matched_entities):
                     query_candidates.append(self.extend_mediator_with_daterange(new_query_candidate,
                                                                                 date_entities[0],
@@ -1102,7 +1103,7 @@ class QueryCandidateExtender:
                 query_candidates.append(new_query_candidate)
                 query_candidate.target_nodes = [
                     new_query_candidate.current_extension]
-                if to_relations and from_relations and date_entities and \
+                if use_date_range_template and to_relations and from_relations and date_entities and \
                         all(not em.entity.overlaps(date_entities[0]) for em in new_query_candidate.matched_entities):
                     query_candidates.append(self.extend_mediator_with_daterange(new_query_candidate,
                                                                                 date_entities,
@@ -1113,34 +1114,3 @@ class QueryCandidateExtender:
     def extend_mediator_with_daterange(self, query_candidate, date_entity, to_relation, from_relation):
         new_query_candidate = query_candidate.extend_with_date_range_filter(from_relation, to_relation, date_entity)
         return new_query_candidate
-
-
-    def extend_candidate_with_type_filter(self, query_candidate):
-        """
-        Adds notable type filter to the candidates, that return list with elements having different notable type.
-        """
-        query_candidates = []
-        query = query_candidate.query
-
-        # Get all the relations for the entity.
-        types = self.get_answers_notable_types(query_candidate)
-
-        # EVERYTHING BELOW ISN'T FINISHED...
-        remaining_query_content_tokens = get_content_tokens(
-            query_candidate.unmatched_tokens)
-        # Find the relations that match.
-        for rel in types:
-            # Only consider mediators here.
-            if rel not in self.mediator_relations:
-                continue
-            relation_match = self.match_relation_with_tokens(rel,
-                                                             remaining_query_content_tokens,
-                                                             query)
-            if not self.parameters.require_relation_match \
-                    or not relation_match.is_empty():
-                new_query_candidate = query_candidate.extend_with_relation_and_variable(
-                    rel,
-                    relation_match,
-                    allow_new_match=True)
-                query_candidates.append(new_query_candidate)
-        return query_candidates
