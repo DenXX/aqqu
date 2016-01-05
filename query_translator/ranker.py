@@ -165,6 +165,7 @@ class AccuModel(MLModel, Ranker):
                  rel_regularization_C=None,
                  ranking_algorithm="random_forest",
                  ranking_n_estimators=90,
+                 use_type_model=True,
                  use_embeddings_relation_model=False,
                  extract_text_features_pruning=False,
                  extract_text_features_ranking=False,
@@ -188,6 +189,7 @@ class AccuModel(MLModel, Ranker):
         self.pruner = None
         self.scaler = None
         self.kwargs = kwargs
+        self.use_type_model = use_type_model
         self.use_embedding_relation_model = use_embeddings_relation_model
         self.ranking_algorithm = ranking_algorithm
         self.ranking_n_estimators = ranking_n_estimators
@@ -228,16 +230,19 @@ class AccuModel(MLModel, Ranker):
                                                     percentile=self.top_ngram_percentile)
             relation_scorer.load_model()
 
-            type_scorer = TypeNgramScorer(self.get_model_name(), self.rel_regularization_C,
-                                          percentile=self.top_ngram_percentile)
-            type_scorer.load_model()
+            if self.use_type_model:
+                type_scorer = TypeNgramScorer(self.get_model_name(), self.rel_regularization_C,
+                                              percentile=self.top_ngram_percentile)
+                type_scorer.load_model()
+                self.feature_extractor.type_score_model = type_scorer
+
             self.feature_extractor.relation_score_model = relation_scorer
-            self.feature_extractor.type_score_model = type_scorer
 
             # Load pruning model if needed
             if self.use_pruning:
                 self.prune_feature_extractor.relation_score_model = relation_scorer
-                self.prune_feature_extractor.type_score_model = type_scorer
+                if self.use_type_model:
+                    self.prune_feature_extractor.type_score_model = type_scorer
                 pruner = CandidatePruner(self.get_model_name(),
                                      self.prune_feature_extractor)
                 pruner.load_model()
@@ -296,14 +301,18 @@ class AccuModel(MLModel, Ranker):
             test_fold = [train_queries[i] for i in test]
             train_fold = [train_queries[i] for i in train]
             rel_model = self.learn_rel_score_model(train_fold)
-            type_model = self.learn_type_score_model(train_fold)
+
+            if self.use_type_model:
+                type_model = self.learn_type_score_model(train_fold)
+                self.feature_extractor.type_score_model = type_model
             self.feature_extractor.relation_score_model = rel_model
-            self.feature_extractor.type_score_model = type_model
+
             logger.info("Applying relation score model.")
 
             # Create an example for pruning classifier.
             if self.use_pruning:
-                self.prune_feature_extractor.type_score_model = type_model
+                if self.use_type_model:
+                    self.prune_feature_extractor.type_score_model = type_model
                 self.prune_feature_extractor.relation_score_model = rel_model
                 testfold_features, testfold_labels = construct_examples(
                     test_fold,
@@ -322,14 +331,16 @@ class AccuModel(MLModel, Ranker):
         logger.info("Training final relation scorer.")
         rel_model = self.learn_rel_score_model(train_queries)
         self.feature_extractor.relation_score_model = rel_model
-        type_model = self.learn_type_score_model(train_queries)
-        self.feature_extractor.type_score_model = type_model
+        if self.use_type_model:
+            type_model = self.learn_type_score_model(train_queries)
+            self.feature_extractor.type_score_model = type_model
+            self.type_scorer = type_model
 
         if self.use_pruning:
             self.prune_feature_extractor.relation_score_model = rel_model
-            self.prune_feature_extractor.type_score_model = type_model
+            if self.use_type_model:
+                self.prune_feature_extractor.type_score_model = type_model
         self.relation_scorer = rel_model
-        self.type_scorer = type_model
 
         # logger.info("Saving prune and ranking training datasets...")
         # with open(globals.config.get('WebSearchFeatures', 'prune-dataset-file'), 'w') as out:
@@ -401,7 +412,8 @@ class AccuModel(MLModel, Ranker):
                      self.dict_vec, self.scaler],
                     self.get_model_filename())
         self.relation_scorer.store_model()
-        self.type_scorer.store_model()
+        if self.use_type_model:
+            self.type_scorer.store_model()
 
         # Store pruning model if needed.
         if self.use_pruning:

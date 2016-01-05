@@ -1011,7 +1011,6 @@ class QueryCandidateExtender:
         return query_candidates
 
     def extend_mediator_with_targetrelation(self, query_candidate):
-        use_date_range_template = globals.config.get('QueryCandidateExtender', 'date-range-template', "") == "True"
         query_candidates = []
         query = query_candidate.query
         query_mediator_node = query_candidate.current_extension
@@ -1064,7 +1063,7 @@ class QueryCandidateExtender:
                                                              query_candidate)
                 new_query_candidate.matches_answer_type = at_match
                 query_candidates.append(new_query_candidate)
-                if use_date_range_template and to_relations and from_relations and date_entities and \
+                if to_relations and from_relations and date_entities and \
                         all(not em.entity.overlaps(date_entities[0]) for em in new_query_candidate.matched_entities):
                     query_candidates.append(self.extend_mediator_with_daterange(new_query_candidate,
                                                                                 date_entities[0],
@@ -1103,7 +1102,7 @@ class QueryCandidateExtender:
                 query_candidates.append(new_query_candidate)
                 query_candidate.target_nodes = [
                     new_query_candidate.current_extension]
-                if use_date_range_template and to_relations and from_relations and date_entities and \
+                if to_relations and from_relations and date_entities and \
                         all(not em.entity.overlaps(date_entities[0]) for em in new_query_candidate.matched_entities):
                     query_candidates.append(self.extend_mediator_with_daterange(new_query_candidate,
                                                                                 date_entities,
