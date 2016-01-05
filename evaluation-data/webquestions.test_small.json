@@ -9,6 +9,15 @@
     ]
   },
   {
+    "url": "http://www.freebase.com/view/en/george_washington_university", 
+    "targetValue": "(list (description \"Washington, D.C.\"))", 
+    "utterance": "what state is george washington university located in?", 
+    "id": 3643, 
+    "result": [
+      "Washington, D.C."
+    ]
+  },
+  {
     "url": "http://www.freebase.com/view/en/bigos", 
     "targetValue": "(list (description Stew))", 
     "utterance": "what are bigos?", 

@@ -10,6 +10,9 @@ Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 """
 import logging
 import sys
+
+import re
+
 from util import *
 import copy
 import globals
@@ -18,6 +21,7 @@ import weakref
 
 logger = logging.getLogger(__name__)
 
+_year_pattern = re.compile("[0-9]{4}")
 
 # Note: might be a place for ABC
 class RelationMatch:
@@ -354,9 +358,11 @@ class QueryCandidate:
         if self.answer_notable_types is None:
             self.answer_notable_types = []
             for answer in self.get_results_text():
+                if _year_pattern.match(answer) is not None:
+                    continue
                 mid = KBEntity.get_entityid_by_name(answer, keep_most_triples=True)
                 if mid:
-                    self.answer_notable_types.append(KBEntity.get_notable_types(mid[0]))
+                    self.answer_notable_types.append([KBEntity.get_notable_types(mid[0]), ])
                 else:
                     self.answer_notable_types.append([])
         return self.answer_notable_types

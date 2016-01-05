@@ -6,17 +6,20 @@ Copyright 2015, University of Freiburg.
 Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 
 """
+import copy
+import os
 import sys
+from itertools import product
 
-from entity_linker.entity_linker import EntityLinker
 from answer_type import AnswerTypeIdentifier
 from pattern_matcher import QueryCandidateExtender, QueryPatternMatcher, get_content_tokens
 import logging
 import ranker
 import time
-from corenlp_parser.parser import CoreNLPParser
 import globals
 import collections
+
+from query_translator.features import FeatureExtractor, get_grams_feats, get_n_grams_features
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +66,13 @@ class QueryTranslator(object):
                  entity_linker,
                  parser,
                  scorer_obj,
-                 notable_types_model=None):
+                 ngram_notable_types_npmi=None):
         self.sparql_backend = sparql_backend
         self.query_extender = query_extender
         self.entity_linker = entity_linker
         self.parser = parser
         self.scorer = scorer_obj
-        self.notable_types_model = notable_types_model
+        self.ngram_notable_types_npmi = ngram_notable_types_npmi
         self.query_extender.set_parameters(scorer_obj.get_parameters())
 
     @staticmethod
@@ -80,13 +83,19 @@ class QueryTranslator(object):
         entity_linker = globals.get_entity_linker()
         parser = globals.get_parser()
         scorer_obj = ranker.SimpleScoreRanker('DefaultScorer')
-        notable_types_model_path = config_params.get('QueryCandidateExtender', 'notable-types-model', '')
-        notable_types_model = None
-        if notable_types_model_path and sys.path.exists(notable_types_model_path):
+        ngram_notable_types_npmi_path = config_params.get('QueryCandidateExtender', 'ngram-notable-types-npmi', '')
+        ngram_notable_types_npmi = None
+        if ngram_notable_types_npmi_path and os.path.exists(ngram_notable_types_npmi_path):
             import cPickle as pickle
-            notable_types_model = pickle.load(notable_types_model_path)
+            try:
+                with open(ngram_notable_types_npmi_path, 'rb') as inp:
+                    logger.info("Loading types model from disk...")
+                    ngram_notable_types_npmi = pickle.load(inp)
+            except IOError as exc:
+                logger.error("Error reading types model: %s" % str(exc))
+                ngram_notable_types_npmi = None
         return QueryTranslator(sparql_backend, query_extender,
-                               entity_linker, parser, scorer_obj, notable_types_model)
+                               entity_linker, parser, scorer_obj, ngram_notable_types_npmi)
 
     def set_scorer(self, scorer):
         """Sets the parameters of the translator.
@@ -127,15 +136,13 @@ class QueryTranslator(object):
         pattern_matcher = QueryPatternMatcher(query,
                                               self.query_extender,
                                               self.sparql_backend)
-        ert_matches = []
-        ermrt_matches = []
-        ermrert_matches = []
         ert_matches = pattern_matcher.match_ERT_pattern()
         ermrt_matches = pattern_matcher.match_ERMRT_pattern()
         ermrert_matches = pattern_matcher.match_ERMRERT_pattern()
         duration = (time.time() - start_time) * 1000
         logging.info("Total translation time: %.2f ms." % duration)
         candidates = ert_matches + ermrt_matches + ermrert_matches
+        # Extend existing candidates, e.g. by adding answer entity type filters.
         candidates = self.extend_candidates(candidates)
         return candidates
 
@@ -147,14 +154,26 @@ class QueryTranslator(object):
         :return: A new set of candidates.
         """
         extra_candidates = []
-        if self.notable_types_model:
-            pass
-            # from query_translator.features import FeatureExtractor
-            # feature_extractor = FeatureExtractor(False, False, n_gram_types_features=True)
-            # for candidate in candidates:
-            #     features = feature_extractor.extract_features(candidate)
-            #     # notable_types = candidate.get_answer_notable_types()
-            #     continue
+        add_types_filters =\
+            globals.config.get('QueryCandidateExtender', 'add-notable-types-filter-templates', '') == "True"
+        if add_types_filters and self.ngram_notable_types_npmi and candidates:
+            for candidate in candidates:
+                n_grams = set(get_n_grams_features(candidate))
+                notable_types = set(type for types in candidate.get_answer_notable_types() for type in types if type)
+                if len(notable_types) > 1:
+                    for n_gram, notable_type in product(n_grams, notable_types):
+                        pair = (n_gram, notable_type)
+                        if pair in self.ngram_notable_types_npmi and \
+                            self.ngram_notable_types_npmi[pair] > globals.NPMI_THRESHOLD:
+                            logger.info("Extending candidate %s with type filter: %s" % (str(candidate), notable_type))
+                            logger.info(pair)
+                            logger.info(self.ngram_notable_types_npmi[pair])
+                            new_query_candidate = copy.deepcopy(candidate)
+                            new_query_candidate.filter_answers_by_type(notable_type)
+                            extra_candidates.append(new_query_candidate)
+                            logger.info(candidate.get_results_text())
+                            logger.info(new_query_candidate.get_results_text())
+                            break
         return candidates + extra_candidates
 
     def parse_and_identify_entities(self, query_text):
