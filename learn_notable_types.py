@@ -52,9 +52,6 @@ def extract_npmi_ngram_type_pairs():
 
                 n_grams = set(get_n_grams_features(correct_candidate.query_candidate))
 
-                # question_tokens = get_query_text_tokens(correct_candidate.query_candidate)[1:]
-                # n_grams = [(question_tokens[0], token) for token in question_tokens[1:]]
-
                 answer_entities = [mid for answer in query.target_result
                                    if year_pattern.match(answer) is None
                                    for mid in KBEntity.get_entityid_by_name(answer, keep_most_triples=True)]
@@ -80,18 +77,13 @@ def extract_npmi_ngram_type_pairs():
 
                 total += 1
 
-    tc = len(type_counts.keys())
-    nc = len(n_gram_counts.keys())
-    tnc = len(n_gram_type_counts.keys())
     npmi = dict()
     from math import log
     for n_gram_type_pair, n_gram_type_count in n_gram_type_counts.iteritems():
-        n_gram, type = n_gram_type_pair
-        # npmi[n_gram_type_pair] = (log(n_gram_type_count) - log(n_gram_counts[n_gram]) - log(type_counts[type]) +
-        #                             log(total)) / (-log(n_gram_type_count) + log(total))
-
-        npmi[n_gram_type_pair] = (log(n_gram_type_count + 1) - log(n_gram_counts[n_gram] + tc) - log(type_counts[type] + nc) +
-                                    log(total + tnc)) / (-log(n_gram_type_count + 1) + log(total + tnc))
+        if n_gram_type_count > 2:
+            n_gram, type = n_gram_type_pair
+            npmi[n_gram_type_pair] = (log(n_gram_type_count) - log(n_gram_counts[n_gram]) - log(type_counts[type]) +
+                                        log(total)) / (-log(n_gram_type_count) + log(total))
 
     with open("type_model_npmi2.pickle", 'wb') as out:
         pickle.dump(npmi, out)
