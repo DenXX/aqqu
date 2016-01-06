@@ -174,7 +174,8 @@ class QueryTranslator(object):
                         if notable_type not in notable_type_scores:
                             notable_type_scores[notable_type] = []
                         notable_type_scores[notable_type].append((n_gram, self.ngram_notable_types_npmi[pair])
-                                                                 if pair in self.ngram_notable_types_npmi else 0.0)
+                                                                 if pair in self.ngram_notable_types_npmi
+                                                                 else ("", 0.0))
 
                     for notable_type, ngram_scores in notable_type_scores.iteritems():
                         scores = [score for ngram, score in ngram_scores]
