@@ -80,12 +80,12 @@ def extract_npmi_ngram_type_pairs():
     npmi = dict()
     from math import log
     for n_gram_type_pair, n_gram_type_count in n_gram_type_counts.iteritems():
-        if n_gram_type_count > 2:
+        if n_gram_type_count > 4:
             n_gram, type = n_gram_type_pair
             npmi[n_gram_type_pair] = (log(n_gram_type_count) - log(n_gram_counts[n_gram]) - log(type_counts[type]) +
                                         log(total)) / (-log(n_gram_type_count) + log(total))
 
-    with open("type_model_npmi2.pickle", 'wb') as out:
+    with open("type_model_npmi.pickle", 'wb') as out:
         pickle.dump(npmi, out)
 
     import operator

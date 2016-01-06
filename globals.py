@@ -17,7 +17,6 @@ FREEBASE_NOTABLE_TYPE_RELATION = "common.topic.notable_for"
 FREEBASE_KEY_PREFIX = "http://rdf.freebase.com/key/"
 
 SEARCH_RESULTS_TOPN = 10
-NPMI_THRESHOLD = 0.5
 
 sparql_backend = None
 # When a configuration is read, store it here to make it accessible.

@@ -67,7 +67,8 @@ class QueryTranslator(object):
                  entity_linker,
                  parser,
                  scorer_obj,
-                 ngram_notable_types_npmi=None):
+                 ngram_notable_types_npmi=None,
+                 notable_types_npmi_threshold=0.5):
         self.sparql_backend = sparql_backend
         self.query_extender = query_extender
         self.entity_linker = entity_linker
@@ -75,6 +76,7 @@ class QueryTranslator(object):
         self.scorer = scorer_obj
         self.ngram_notable_types_npmi = ngram_notable_types_npmi
         self.query_extender.set_parameters(scorer_obj.get_parameters())
+        self.notable_types_npmi_threshold = notable_types_npmi_threshold
 
     @staticmethod
     def init_from_config():
@@ -85,6 +87,7 @@ class QueryTranslator(object):
         parser = globals.get_parser()
         scorer_obj = ranker.SimpleScoreRanker('DefaultScorer')
         ngram_notable_types_npmi_path = config_params.get('QueryCandidateExtender', 'ngram-notable-types-npmi', '')
+        notable_types_npmi_threshold = config_params.get('QueryCandidateExtender', 'notable-types-npmi-threshold')
         ngram_notable_types_npmi = None
         if ngram_notable_types_npmi_path and os.path.exists(ngram_notable_types_npmi_path):
             import cPickle as pickle
@@ -96,7 +99,9 @@ class QueryTranslator(object):
                 logger.error("Error reading types model: %s" % str(exc))
                 ngram_notable_types_npmi = None
         return QueryTranslator(sparql_backend, query_extender,
-                               entity_linker, parser, scorer_obj, ngram_notable_types_npmi)
+                               entity_linker, parser, scorer_obj,
+                               ngram_notable_types_npmi,
+                               notable_types_npmi_threshold)
 
     def set_scorer(self, scorer):
         """Sets the parameters of the translator.
@@ -174,7 +179,7 @@ class QueryTranslator(object):
                     for notable_type, ngram_scores in notable_type_scores.iteritems():
                         scores = [score for ngram, score in ngram_scores]
                         max_score = max(scores)
-                        if max_score > globals.NPMI_THRESHOLD:
+                        if max_score > self.notable_types_npmi_threshold:
                             avg_score = avg(scores)
                             logger.info("Extending candidate with type filter:")
                             logger.info(candidate)
