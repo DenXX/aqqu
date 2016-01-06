@@ -458,7 +458,7 @@ class QueryCandidateExtender:
                                               'word-embeddings')
         word_deriv_file = config_options.get('Alignment',
                                              'word-derivations')
-        use_date_range_template = config_options.get('QueryCandidateExtender', 'date-range-template') == "True"
+        use_date_range_template = config_options.get('QueryCandidateExtender', 'add-date-range-template') == "True"
         we_synonyms = WordEmbeddings(embeddings_model)
         word_derivations = WordDerivations(word_deriv_file)
         mediator_relations = data.read_mediator_relations(
