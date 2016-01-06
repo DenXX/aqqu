@@ -40,7 +40,7 @@ def extract_npmi_ngram_type_pairs():
     type_counts = dict()
     n_gram_counts = dict()
     total = 0
-    year_pattern = re.compile("[0-9]{4}")
+    year_pattern = re.compile("[0-9]+")
     for dataset in datasets:
         queries = get_evaluated_queries(dataset, True, parameters)
         for index, query in enumerate(queries):
@@ -74,12 +74,14 @@ def extract_npmi_ngram_type_pairs():
 
                 total += 1
 
+    tc = len(type_counts.keys())
+    nc = len(n_gram_counts.keys())
     npmi = dict()
     from math import log
     for n_gram_type_pair, n_gram_type_count in n_gram_type_counts.iteritems():
         n_gram, type = n_gram_type_pair
-        npmi[n_gram_type_pair] = (log(n_gram_type_count) - log(n_gram_counts[n_gram]) - log(type_counts[type]) +
-                                    log(total)) / (-log(n_gram_type_count) + log(total))
+        npmi[n_gram_type_pair] = (log(n_gram_type_count + 1) - log(n_gram_counts[n_gram] + tc) - log(type_counts[type] + nc) +
+                                    log(total + tc * nc)) / (-log(n_gram_type_count + 1) + log(total + nc * tc))
 
     with open("type_model_npmi.pickle", 'wb') as out:
         pickle.dump(npmi, out)
