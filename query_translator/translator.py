@@ -159,7 +159,8 @@ class QueryTranslator(object):
         if add_types_filters and self.ngram_notable_types_npmi and candidates:
             for candidate in candidates:
                 n_grams = set(get_n_grams_features(candidate))
-                notable_types = set(type for types in candidate.get_answer_notable_types() for type in types if type)
+                notable_types = set(notable_type for notable_type in candidate.get_answer_notable_types()
+                                    if notable_type)
                 if len(notable_types) > 1:
                     for n_gram, notable_type in product(n_grams, notable_types):
                         pair = (n_gram, notable_type)

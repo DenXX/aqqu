@@ -374,7 +374,7 @@ class FeatureExtractor(object):
         :param candidate:
         :return:
         """
-        notable_types = set(type for types in candidate.get_answer_notable_types() for type in types if type)
+        notable_types = set(type for type in candidate.get_answer_notable_types() if type)
         n_grams = get_n_grams_features(candidate)
         return self.extract_ngram_features(n_grams, notable_types, "type")
 

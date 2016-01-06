@@ -21,7 +21,7 @@ import weakref
 
 logger = logging.getLogger(__name__)
 
-_year_pattern = re.compile("[0-9]{4}")
+_year_pattern = re.compile("[0-9]+")
 
 # Note: might be a place for ABC
 class RelationMatch:
@@ -324,6 +324,8 @@ class QueryCandidate:
         self.matches_answer_type = None
         # Result of the given query
         self.query_results = None
+        # Mids of the query results.
+        self.query_results_mids = None
         # Notable types of answer entities.
         self.answer_notable_types = None
         # Filter on date range
@@ -358,14 +360,10 @@ class QueryCandidate:
         """
         if self.answer_notable_types is None:
             self.answer_notable_types = []
-            for answer in self.get_results_text():
+            for mid, answer in zip(self.get_results_mids(), self.get_results_text()):
                 if _year_pattern.match(answer) is not None:
                     continue
-                mid = KBEntity.get_entityid_by_name(answer, keep_most_triples=True)
-                if mid:
-                    self.answer_notable_types.append([KBEntity.get_notable_types(mid[0]), ])
-                else:
-                    self.answer_notable_types.append([])
+                self.answer_notable_types.append(KBEntity.get_notable_type(mid))
         return self.answer_notable_types
 
     def get_entity_scores(self):
@@ -402,6 +400,8 @@ class QueryCandidate:
         if 'type_filter' not in d:
             self.type_filter = None
             self.type_filter_npmi = None
+        if 'query_results_mids' not in d:
+            self.query_results_mids = None
 
     def get_result_count(self, use_cached_value=True):
         """
@@ -454,17 +454,36 @@ class QueryCandidate:
             return self.query_results
         res = self.get_result(include_name=True)
         self.query_results = []
+        self.query_results_mids = []
         for r in res:
             if len(r) > 1 and r[1]:
                 self.query_results.append(r[1])
+                self.query_results_mids.append(r[0])
             else:
                 self.query_results.append(r[0])
+                self.query_results_mids.append(r[0])
         return self.query_results
+
+    def get_results_mids(self):
+        if self.query_results_mids is None:
+            # Get and cache the results.
+            self.get_results_text()
+        return self.query_results_mids
 
     def filter_answers_by_type(self, type_filter, score):
         assert self.type_filter is None
-        self.query_results = filter(lambda result: KBEntity.get_notable_type_by_name(result) == type_filter,
-                                    self.get_results_text())
+        text_results = self.get_results_text()
+        mid_results = self.get_results_mids()
+        assert len(text_results) == len(mid_results)
+
+        new_results_text = []
+        new_results_mids = []
+        for mid, answer in zip(mid_results, text_results):
+            if KBEntity.get_notable_type(mid) == type_filter:
+                new_results_mids.append(mid)
+                new_results_text.append(answer)
+        self.query_results = new_results_text
+        self.query_results_mids = new_results_mids
         self.type_filter = type_filter
         self.type_filter_npmi = score
         self.cached_result_count = len(self.query_results)

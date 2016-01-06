@@ -53,7 +53,7 @@ def extract_npmi_ngram_type_pairs():
                                    if year_pattern.match(answer) is None
                                    for mid in KBEntity.get_entityid_by_name(answer, keep_most_triples=True)]
                 correct_notable_types = set(filter(lambda x: x,
-                                                   [KBEntity.get_notable_types(entity_mid)
+                                                   [KBEntity.get_notable_type(entity_mid)
                                                     for entity_mid in answer_entities]))
 
                 for notable_type in correct_notable_types:
@@ -113,14 +113,14 @@ def train_type_model():
             answer_entities = [mid for answer in query.target_result
                                for mid in KBEntity.get_entityid_by_name(answer, keep_most_triples=True)]
             correct_notable_types = set(filter(lambda x: x,
-                                               [KBEntity.get_notable_types(entity_mid)
+                                               [KBEntity.get_notable_type(entity_mid)
                                                 for entity_mid in answer_entities]))
 
             other_notable_types = set()
             for candidate in query.eval_candidates:
                 entities = [mid for entity_name in candidate.prediction
                             for mid in KBEntity.get_entityid_by_name(entity_name, keep_most_triples=True)]
-                other_notable_types.update(set([KBEntity.get_notable_types(entity_mid) for entity_mid in entities]))
+                other_notable_types.update(set([KBEntity.get_notable_type(entity_mid) for entity_mid in entities]))
             incorrect_notable_types = other_notable_types.difference(correct_notable_types)
 
             for type in correct_notable_types.union(incorrect_notable_types):
@@ -169,7 +169,7 @@ if __name__ == "__main__":
             tokens = [token.token for token in parser.parse(query.utterance).tokens]
             answer_entities = [mid for answer in query.target_result
                                for mid in KBEntity.get_entityid_by_name(answer, keep_most_triples=True)]
-            notable_types = [KBEntity.get_notable_types(entity_mid) for entity_mid in answer_entities]
+            notable_types = [KBEntity.get_notable_type(entity_mid) for entity_mid in answer_entities]
             data.append((tokens, notable_types))
             logger.info(tokens)
             logger.info([KBEntity.get_entity_name(notable_type) for notable_type in notable_types])
