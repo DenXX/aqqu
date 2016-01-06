@@ -165,7 +165,9 @@ class QueryTranslator(object):
                         pair = (n_gram, notable_type)
                         if pair in self.ngram_notable_types_npmi and \
                             self.ngram_notable_types_npmi[pair] > globals.NPMI_THRESHOLD:
-                            logger.info("Extending candidate %s with type filter: %s" % (str(candidate), notable_type))
+                            logger.info("Extending candidate with type filter:")
+                            logger.info(candidate)
+                            logger.info(notable_type)
                             logger.info(pair)
                             logger.info(self.ngram_notable_types_npmi[pair])
                             new_query_candidate = copy.deepcopy(candidate)

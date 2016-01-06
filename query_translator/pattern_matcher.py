@@ -357,7 +357,7 @@ class QueryCandidateExtender:
                  mediator_relations, reverse_relations, relation_expected_types,
                  sparql_backend, relation_words, mediated_rel_words,
                  target_type_distributions, synonyms, word_derivations,
-                 word_type_counts, relation_lemmas):
+                 word_type_counts, relation_lemmas, use_date_range_template):
         """
         :type parameters: TranslatorParameters
         :param mediator_index:
@@ -419,6 +419,7 @@ class QueryCandidateExtender:
         self.filter_domains = None
         # This needs to be set via set_parameters!
         self.parameters = None
+        self.use_date_range_template = use_date_range_template
 
     @staticmethod
     def init_from_config():
@@ -457,6 +458,7 @@ class QueryCandidateExtender:
                                               'word-embeddings')
         word_deriv_file = config_options.get('Alignment',
                                              'word-derivations')
+        use_date_range_template = config_options.get('QueryCandidateExtender', 'date-range-template') == "True"
         we_synonyms = WordEmbeddings(embeddings_model)
         word_derivations = WordDerivations(word_deriv_file)
         mediator_relations = data.read_mediator_relations(
@@ -483,7 +485,7 @@ class QueryCandidateExtender:
                                       mediated_relation_words,
                                       rel_tt_distributions, we_synonyms,
                                       word_derivations, word_type_counts,
-                                      rel_lemmas)
+                                      rel_lemmas, use_date_range_template)
 
     def set_parameters(self, parameters):
         """Sets the parameters of the extender.
@@ -1063,7 +1065,7 @@ class QueryCandidateExtender:
                                                              query_candidate)
                 new_query_candidate.matches_answer_type = at_match
                 query_candidates.append(new_query_candidate)
-                if to_relations and from_relations and date_entities and \
+                if self.use_date_range_template and to_relations and from_relations and date_entities and \
                         all(not em.entity.overlaps(date_entities[0]) for em in new_query_candidate.matched_entities):
                     query_candidates.append(self.extend_mediator_with_daterange(new_query_candidate,
                                                                                 date_entities[0],
@@ -1102,7 +1104,7 @@ class QueryCandidateExtender:
                 query_candidates.append(new_query_candidate)
                 query_candidate.target_nodes = [
                     new_query_candidate.current_extension]
-                if to_relations and from_relations and date_entities and \
+                if self.use_date_range_template and to_relations and from_relations and date_entities and \
                         all(not em.entity.overlaps(date_entities[0]) for em in new_query_candidate.matched_entities):
                     query_candidates.append(self.extend_mediator_with_daterange(new_query_candidate,
                                                                                 date_entities,

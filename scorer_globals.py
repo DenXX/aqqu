@@ -125,6 +125,27 @@ def init():
                                      extract_text_features_ranking=False,
                                      use_pruning=True),
 
+                   ranker.AccuModel('WQ_Ranker_RF100_TypeFilter_Dev',
+                                     "webquestions_split_train_typefilter",
+                                     top_ngram_percentile=5,
+                                     ranking_algorithm='random_forest',
+                                     ranking_n_estimators=100,
+                                     rel_regularization_C=1.0,
+                                     use_type_model=False,
+                                     extract_text_features_pruning=False,
+                                     extract_text_features_ranking=False,
+                                     use_pruning=True),
+                   ranker.AccuModel('WQ_Ranker_RF100_TypeFilterModel_Dev',
+                                     "webquestions_split_train_typefilter",
+                                     top_ngram_percentile=5,
+                                     ranking_algorithm='random_forest',
+                                     ranking_n_estimators=100,
+                                     rel_regularization_C=1.0,
+                                     use_type_model=True,
+                                     extract_text_features_pruning=False,
+                                     extract_text_features_ranking=False,
+                                     use_pruning=True),
+
                    # Baselines with external entities
                    ranker.AccuModel('WQ_Ranker_ExtEnt_All_RF100_Dev',
                                      "webquestions_split_train_externalentities_all",
@@ -521,6 +542,13 @@ def init():
          ('webquestions_split_dev_daterange',
           'evaluation-data/'
           'webquestions.split.dev.daterange.json'),
+
+         ('webquestions_split_train_typefilter',
+          'evaluation-data/'
+          'webquestions.split.train.typefilter.json'),
+         ('webquestions_split_dev_typefilter',
+          'evaluation-data/'
+          'webquestions.split.dev.typefilter.json'),
 
 
          ('webquestions_test_filter',
