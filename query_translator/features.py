@@ -301,7 +301,8 @@ class FeatureExtractor(object):
                 features["has_date_range_filter"] = 1
             if candidate.type_filter is not None:
                 features["has_type_filter"] = 1
-                features["type_filter_npmi_score"] = candidate.type_filter_npmi
+                features["type_filter_max_npmi_score"] = candidate.type_filter_max_npmi
+                features["type_filter_avg_npmi_score"] = candidate.type_filter_avg_npmi
 
         # Extra features, not web search based, but potentially useful.
         # if self.generate_extra_features:

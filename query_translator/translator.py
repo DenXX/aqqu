@@ -20,6 +20,7 @@ import globals
 import collections
 
 from query_translator.features import FeatureExtractor, get_grams_feats, get_n_grams_features
+from text2kb.utils import avg
 
 logger = logging.getLogger(__name__)
 
@@ -162,22 +163,29 @@ class QueryTranslator(object):
                 notable_types = set(notable_type for notable_type in candidate.get_answer_notable_types()
                                     if notable_type)
                 if len(notable_types) > 1:
+                    notable_type_scores = dict()
                     for n_gram, notable_type in product(n_grams, notable_types):
                         pair = (n_gram, notable_type)
-                        if pair in self.ngram_notable_types_npmi and \
-                            self.ngram_notable_types_npmi[pair] > globals.NPMI_THRESHOLD:
+                        if notable_type not in notable_type_scores:
+                            notable_type_scores[notable_type] = []
+                        notable_type_scores[notable_type].append((n_gram, self.ngram_notable_types_npmi[pair])
+                                                                 if pair in self.ngram_notable_types_npmi else 0.0)
+
+                    for notable_type, ngram_scores in notable_type_scores.iteritems():
+                        scores = [score for ngram, score in ngram_scores]
+                        max_score = max(scores)
+                        if max_score > globals.NPMI_THRESHOLD:
+                            avg_score = avg(scores)
                             logger.info("Extending candidate with type filter:")
                             logger.info(candidate)
                             logger.info(notable_type)
-                            logger.info(pair)
-                            logger.info(self.ngram_notable_types_npmi[pair])
+                            logger.info(ngram_scores)
                             new_query_candidate = copy.deepcopy(candidate)
                             new_query_candidate.filter_answers_by_type(notable_type,
-                                                                       self.ngram_notable_types_npmi[pair])
+                                                                       [max_score, avg_score])
                             extra_candidates.append(new_query_candidate)
                             logger.info(candidate.get_results_text())
                             logger.info(new_query_candidate.get_results_text())
-                            break
         return candidates + extra_candidates
 
     def parse_and_identify_entities(self, query_text):

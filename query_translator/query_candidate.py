@@ -332,7 +332,8 @@ class QueryCandidate:
         self.date_range_filter = None
         # Filter based on results notable type.
         self.type_filter = None
-        self.type_filter_npmi = None
+        self.type_filter_max_npmi = None
+        self.type_filter_avg_npmi = None
 
     def __unicode__(self):
         return u','.join(self.get_entity_names()) +\
@@ -399,7 +400,8 @@ class QueryCandidate:
             self.date_range_filter = None
         if 'type_filter' not in d:
             self.type_filter = None
-            self.type_filter_npmi = None
+            self.type_filter_max_npmi = None
+            self.type_filter_avg_npmi = None
         if 'query_results_mids' not in d:
             self.query_results_mids = None
 
@@ -485,7 +487,8 @@ class QueryCandidate:
         self.query_results = new_results_text
         self.query_results_mids = new_results_mids
         self.type_filter = type_filter
-        self.type_filter_npmi = score
+        self.type_filter_max_npmi = score[0]
+        self.type_filter_avg_npmi = score[0]
         self.cached_result_count = len(self.query_results)
         return self.get_results_text()
 
