@@ -53,6 +53,7 @@ def get_token_idf(token):
             logger.info("Reading term web counts done!")
 
     if _term_counts:
+        token = token.encode('utf-8')
         idf = log(max(1.0, WEB_DOCUMENTS_COUNT / (_term_counts[token]
                                                   if token in _term_counts and _term_counts[token] > 0 else 1.0)))
         return idf

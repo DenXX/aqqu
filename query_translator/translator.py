@@ -87,7 +87,7 @@ class QueryTranslator(object):
         parser = globals.get_parser()
         scorer_obj = ranker.SimpleScoreRanker('DefaultScorer')
         ngram_notable_types_npmi_path = config_params.get('QueryCandidateExtender', 'ngram-notable-types-npmi', '')
-        notable_types_npmi_threshold = config_params.get('QueryCandidateExtender', 'notable-types-npmi-threshold')
+        notable_types_npmi_threshold = float(config_params.get('QueryCandidateExtender', 'notable-types-npmi-threshold'))
         ngram_notable_types_npmi = None
         if ngram_notable_types_npmi_path and os.path.exists(ngram_notable_types_npmi_path):
             import cPickle as pickle
