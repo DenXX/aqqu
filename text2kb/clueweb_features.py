@@ -701,8 +701,10 @@ def generate_clueweb_features(candidate):
 
     return {
         "clueweb_feature:max_score": max(scores),
+        "clueweb_feature:min_score": min(scores),
         "clueweb_feature:avg_score": avg(scores),
         "clueweb_feature:max_emb_score": max(emb_scores),
+        "clueweb_feature:min_emb_score": min(emb_scores),
         "clueweb_feature:avg_emb_score": avg(emb_scores),
     }
 

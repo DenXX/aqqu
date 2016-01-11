@@ -184,6 +184,7 @@ class AccuModel(MLModel, Ranker):
         # The index of the correct label.
         self.correct_index = -1
         self.cmp_cache = dict()
+        self.cmp_features_cache = dict()
         self.relation_scorer = None
         self.type_scorer = None
         self.pruner = None
@@ -197,6 +198,7 @@ class AccuModel(MLModel, Ranker):
         self.rel_regularization_C = rel_regularization_C
         self.use_pruning = use_pruning
         # Feature extractor for ranking model.
+        self.same_feature_extractors = False
         self.feature_extractor = FeatureExtractor(True,
                                                   False,
                                                   None,
@@ -212,6 +214,10 @@ class AccuModel(MLModel, Ranker):
                                                             text_features=extract_text_features_pruning,
                                                             cqa_features=extract_cqa_features_pruning,
                                                             clueweb_features=extract_clueweb_features_pruning)
+            self.same_feature_extractors = (extract_text_features_pruning == extract_text_features_ranking) and \
+                                           (extract_clueweb_features_pruning == extract_clueweb_features_ranking) and \
+                                           (extract_cqa_features_pruning == extract_cqa_features_ranking)
+
 
     def load_model(self):
         model_file = self.get_model_filename()
@@ -309,6 +315,7 @@ class AccuModel(MLModel, Ranker):
 
             logger.info("Applying relation score model.")
 
+            query_features_cache = dict() if self.same_feature_extractors else None
             # Create an example for pruning classifier.
             if self.use_pruning:
                 if self.use_type_model:
@@ -316,14 +323,16 @@ class AccuModel(MLModel, Ranker):
                 self.prune_feature_extractor.relation_score_model = rel_model
                 testfold_features, testfold_labels = construct_examples(
                     test_fold,
-                    self.prune_feature_extractor)
+                    self.prune_feature_extractor,
+                    query_features_cache)
                 features.extend(testfold_features)
                 labels.extend(testfold_labels)
 
             # Create a pairwise example for ranking model.
             testfoldpair_features, testfoldpair_labels = construct_pair_examples(
                 test_fold,
-                self.feature_extractor)
+                self.feature_extractor,
+                query_features_cache)
             pair_features.extend(testfoldpair_features)
             pair_labels.extend(testfoldpair_labels)
             num_fold += 1
@@ -437,10 +446,17 @@ class AccuModel(MLModel, Ranker):
             if (x_candidate, y_candidate) in self.cmp_cache:
                 res = self.cmp_cache[(x_candidate, y_candidate)]
             if res is None:
-                x_features = self.feature_extractor.extract_features(
-                    x_candidate)
-                y_features = self.feature_extractor.extract_features(
-                    y_candidate)
+                if x_candidate in self.cmp_features_cache:
+                    x_features = self.cmp_features_cache[x_candidate]
+                else:
+                    x_features = self.feature_extractor.extract_features(x_candidate)
+                    self.cmp_features_cache[x_candidate] = x_features
+                if y_candidate in self.cmp_features_cache:
+                    y_features = self.cmp_features_cache[y_candidate]
+                else:
+                    y_features = self.feature_extractor.extract_features(y_candidate)
+                    self.cmp_features_cache[y_candidate] = y_features
+
                 diff = feature_diff(x_features, y_features)
                 X = self.dict_vec.transform(diff)
                 if self.scaler:
@@ -454,7 +470,7 @@ class AccuModel(MLModel, Ranker):
             else:
                 return -1
 
-    def _precompute_cmp(self, candidates, max_cache_candidates=300):
+    def _precompute_cmp(self, candidates, max_cache_candidates=500):
         """Pre-compute comparisons.
 
         The main overhead is calling the classification routine. Therefore,
@@ -527,13 +543,16 @@ class AccuModel(MLModel, Ranker):
             logger.debug("%s candidates" % len(query_candidates))
 
         start = time.time()
-        candidates = [key(q) for q in query_candidates]
+
+        candidates = [key(q) for q in query_candidates if q.query_candidate.get_result_count() > 0]
         self._precompute_cmp(candidates)
-        ranked_candidates = sorted(query_candidates,
+        ranked_candidates = sorted([candidate for candidate in query_candidates
+                                    if candidate.query_candidate.get_result_count() > 0],
                                    cmp=self.compare_pair,
                                    key=key,
                                    reverse=True)
         self.cmp_cache = dict()
+        self.cmp_features_cache = dict()
         if len(query_candidates) > 0:
             duration = (time.time() - start) * 1000
             logger.debug(
@@ -1356,7 +1375,7 @@ def get_top_chi2_candidate_ngrams(queries, f_extractor, percentile):
     return ngrams_dict
 
 
-def construct_pair_examples(queries, f_extractor):
+def construct_pair_examples(queries, f_extractor, query_features_cache=None):
     """Construct training examples from candidates using pair-wise transform.
 
     Construct a list of examples from the given evaluated queries.
@@ -1377,7 +1396,8 @@ def construct_pair_examples(queries, f_extractor):
         # perfect.
         correct_cands = set()
         candidates = [x.query_candidate for x in query.eval_candidates]
-        features_cache = dict()
+        features_cache = query_features_cache[query.id] if query_features_cache and \
+                                                           query.id in query_features_cache else dict()
         for i, candidate in enumerate(candidates):
             if i + 1 == oracle_position:
                 correct_cands.add(candidate)
@@ -1413,7 +1433,7 @@ def construct_pair_examples(queries, f_extractor):
     return features, labels
 
 
-def construct_examples(queries, f_extractor):
+def construct_examples(queries, f_extractor, query_features_cache=None):
     """Construct training examples from candidates.
 
     Construct a list of examples from the given evaluated queries.
@@ -1429,6 +1449,10 @@ def construct_examples(queries, f_extractor):
         candidates = [x.query_candidate for x in query.eval_candidates]
         for i, candidate in enumerate(candidates):
             candidate_features = f_extractor.extract_features(candidate)
+            if query_features_cache:
+                if query not in query_features_cache:
+                    query_features_cache[query] = dict()
+                query_features_cache[query][candidate] = candidate_features
             features.append(candidate_features)
             if i + 1 == oracle_position:
                 labels.append(1)
