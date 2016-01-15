@@ -555,7 +555,7 @@ class AccuModel(MLModel, Ranker):
         self.cmp_features_cache = dict()
         if len(query_candidates) > 0:
             duration = (time.time() - start) * 1000
-            logger.debug(
+            logger.info(
                 "Sorting %s candidates took %s ms. %s ms per candidate" %
                 (len(query_candidates), duration,
                  float(duration) / len(query_candidates)))
@@ -663,7 +663,7 @@ class CandidatePruner(MLModel):
                      self.dict_vec, self.scaler], self.get_model_filename())
         logger.info("Done.")
 
-    def prune_candidates(self, query_candidates, key):
+    def prune_candidates(self, query_candidates, key, threshold=0.3):
         remaining = []
         candidates = [key(q) for q in query_candidates]
         features = []
@@ -672,7 +672,7 @@ class CandidatePruner(MLModel):
             features.append(c_features)
         X = self.dict_vec.transform(features)
         X = self.scaler.transform(X)
-        p = self.model.predict(X)
+        p = [1 if prob > threshold else 0 for prob in self.model.predict_proba(X)[:,1]]
         # c = self.prune_label_encoder.inverse_transform(p)
         for candidate, predict in zip(query_candidates, p):
             if predict == 1:

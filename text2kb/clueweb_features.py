@@ -634,7 +634,7 @@ def _read_clueweb_data():
                         _clueweb_entitypairs_langmodel[entity_pair][word] = old_count + count
 
                 if index % 1000 == 0:
-                    print "%d lines processed" % index
+                    logger.info("%d lines processed" % index)
         logger.info("Normalizing ClueWeb count scores...")
         for entity_pair, word_counts in _clueweb_entitypairs_langmodel.iteritems():
             _clueweb_entitypairs_langmodel[entity_pair] = dict((word, 1.0 * count / entitypairs_totalcount[entity_pair])

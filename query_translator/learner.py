@@ -103,7 +103,7 @@ def evaluate_scorer(test_queries, scorer_obj, print_ranked_candidates=False):
             query.eval_candidates,
             key=lambda x: x.query_candidate)
         if (index + 1) % 100 == 0:
-            print "%d questions answered" % (index + 1)
+            logger.info("%d questions answered" % (index + 1))
     res, queries = evaluate(test_queries)
     if print_ranked_candidates:
         print_candidates(test_queries)
