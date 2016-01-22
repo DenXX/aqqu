@@ -357,8 +357,6 @@ class FeatureExtractor(object):
         # # Cache features and store which feature extractor was used to produce them.
         # candidate.features = features
         # candidate.feature_extractor = self
-        logger.info(candidate)
-        logger.info(features)
         return features
 
     def extract_ngram_relation_features(self, candidate, include_skip_grams=False):

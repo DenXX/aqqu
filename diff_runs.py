@@ -173,7 +173,7 @@ def print_all_non_perfect(system_queries):
 
 
 if __name__ == "__main__":
-    # diff_pickles(argv[1], argv[2])
-    diff_text_pickle(argv[1], argv[2])
+    diff_pickles(argv[1], argv[2])
+    # diff_text_pickle(argv[1], argv[2])
     # pickle_to_text(argv[1])
     # print_all_non_perfect(argv[1])
