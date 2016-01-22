@@ -250,7 +250,7 @@ class AccuModel(MLModel, Ranker):
                 if self.use_type_model:
                     self.prune_feature_extractor.type_score_model = type_scorer
                 pruner = CandidatePruner(self.get_model_name(),
-                                     self.prune_feature_extractor)
+                                         self.prune_feature_extractor)
                 pruner.load_model()
                 self.pruner = pruner
 

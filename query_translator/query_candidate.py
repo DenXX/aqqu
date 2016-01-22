@@ -343,7 +343,7 @@ class QueryCandidate:
         return ','.join(name.encode('utf-8') for name in self.get_entity_names()) +\
                '[' + ','.join(name.encode('utf-8') for name in self.get_relation_names()) + '] ' +\
                ','.join(token.token.encode('utf-8') for token in self.matched_tokens) +\
-               (" > type filter: %s" % self.type_filter if self.type_filter else "")
+               (" > type filter: %s" % self.type_filter.encode("utf-8") if self.type_filter else "")
 
     def __repr__(self):
         return str(self)

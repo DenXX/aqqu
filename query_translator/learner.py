@@ -73,18 +73,17 @@ def evaluate_scorer_parallel(test_queries, scorer_obj,
     return res, queries
 
 
-def print_candidates(test_queries):
+def print_candidates(test_query):
     """
     Prints candidates
     :param test_queries:
     :return:
     """
-    for test_query in test_queries:
-        if test_query.f1 < 1.0:
-            print test_query.utterance, test_query.f1, test_query.oracle_f1, test_query.oracle_position
-            for rank, candidate in enumerate(test_query.eval_candidates):
-                print '\t' + str(rank) + '\t' + str(candidate.prediction) +\
-                      '\t' + str(candidate.query_candidate) + '\t' + str(candidate.evaluation_result.f1)
+    if test_query.f1 < 1.0:
+        print test_query.utterance, test_query.f1, test_query.oracle_f1, test_query.oracle_position
+        for rank, candidate in enumerate(test_query.eval_candidates):
+            print '\t' + str(rank) + '\t' + str(candidate.prediction) +\
+                  '\t' + str(candidate.query_candidate) + '\t' + str(candidate.evaluation_result.f1)
 
 
 def evaluate_scorer(test_queries, scorer_obj, print_ranked_candidates=False):
@@ -98,15 +97,19 @@ def evaluate_scorer(test_queries, scorer_obj, print_ranked_candidates=False):
     :param num_processes:
     :return:
     """
+    questions = set(["what was lucille ball?", "who were mary shelley?", "where is the un based?", "where is daud ibrahim?", "who is moira en x men?", "where buddha come from?", "who has ray allen dated?", "who were jesus siblings?", "who is keyshia cole dad?", "what was kim richards in?", "where did mary bell live?", "who is the voice of kitt?", "what did jesse owens won?", "what country was slovakia?", "who's dating claire danes?", "what happened at benghazi?", "who played elaine the pain?", "how many mary mary sisters?", "where does airtran airways fly?", "what ocean is around hawaii?", "what concentration camp did anne frank died in?", "what county is san francisco?", "what language do chinese people write in?", "what is the stanley cup named after?", "who is the mother of prince michael jackson?", "what countries are near italy?", "what year was kenya moore crowned miss usa?", "what did werner heisenberg discover?"])
     for index, query in enumerate(test_queries):
+        if query.utterance not in questions:
+            continue
+
         query.eval_candidates = scorer_obj.rank_query_candidates(
             query.eval_candidates,
             key=lambda x: x.query_candidate)
+        if print_ranked_candidates:
+                print_candidates(query)
         if (index + 1) % 100 == 0:
             logger.info("%d questions answered" % (index + 1))
     res, queries = evaluate(test_queries)
-    if print_ranked_candidates:
-        print_candidates(test_queries)
     return res, queries
 
 
