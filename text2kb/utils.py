@@ -5,10 +5,12 @@ import logging
 import string
 from math import log, sqrt
 
+import justext
 import numpy as np
 from gensim import matutils
 
 import globals
+from corenlp_parser.parser import Token
 from entity_linker.entity_linker import KBEntity
 from query_translator.alignment import WordEmbeddings
 
@@ -440,16 +442,23 @@ class WebSearchResult:
         :return: Text content of the given document
         """
         try:
-            if os.path.isfile(self.document_location):
+            from os import path
+            if path.isfile(self.document_location):
                 import codecs
                 with codecs.open(self.document_location, 'r', 'utf-8') as input_document:
                     content = input_document.read()
                     text = justext.justext(content, justext.get_stoplist("English"))
                     res = []
+                    # total_length = 0
                     for paragraph in text:
                         if not paragraph.is_boilerplate:
                             res.append(paragraph.text)
-                    return '\n'.join(res)
+                            # total_length += len(paragraph.text)
+                        # if total_length > 10000:
+                        #     break
+
+                    res = '\n'.join(res)
+                    return res
                     # return extract_text(content)
             else:
                 logger.warning("Document not found: " + str(self.document_location))
@@ -459,6 +468,9 @@ class WebSearchResult:
 
     @staticmethod
     def get_best_fragment_positions(document_token2pos, document_entity2pos, question_token2pos, window_size=100):
+        import operator
+        from collections import deque
+
         question_tokens_count = len(question_token2pos.keys())
         question_tokens_list = question_token2pos.keys()
         question_token_positions = [(pos, index) for index, token in enumerate(question_tokens_list)
@@ -777,3 +789,6 @@ class WebSearchResult:
 #         if len(tokenset1) == 0 or len(tokenset2) == 0:
 #             return 0.0
 #         return 1.0 * len(tokenset1.intersection(tokenset2)) / sqrt(len(tokenset1)) / sqrt(len(tokenset2))
+
+if __name__ == "__main__":
+    serp = get_questions_serps()

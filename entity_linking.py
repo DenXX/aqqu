@@ -3,7 +3,7 @@ from corenlp_parser.parser import CoreNLPParser
 from entity_linker.entity_linker import EntityLinker, WebSearchResultsExtenderEntityLinker
 from query_translator import translator
 from query_translator.evaluation import load_eval_queries
-from text2kb.utils import tokenize
+from text2kb.utils import tokenize, get_questions_serps
 
 __author__ = 'dsavenk'
 
@@ -43,11 +43,9 @@ def main_entities():
             print top_entities[:50]
 
 
-def main():
-    globals.read_configuration('config.cfg')
+def main_doc_entities_from_content():
     entity_linker = globals.get_entity_linker()
-    config_options = globals.config
-
+    document_entities_file = globals.config.get('WebSearchFeatures', 'documents-entities-file')
     doc_entities = dict()
     from text2kb.utils import get_documents_content_dict
     from text2kb.utils import get_questions_serps
@@ -62,7 +60,7 @@ def main():
         index += 1
         if index % 100 == 0:
             logger.info("%d SERPs processed" % index)
-    with open(sys.argv[1], 'w') as out:
+    with open(document_entities_file, 'wx') as out:
         pickle.dump(doc_entities, out)
 
 
@@ -102,8 +100,8 @@ def main_entity_link_text():
 
 
 def entity_link_snippets():
-    globals.read_configuration('config.cfg')
     entity_linker = globals.get_entity_linker()
+    snippet_entities_file = globals.config.get('WebSearchFeatures', 'document-snippet-entities')
     from text2kb.utils import get_questions_serps
     question_search_results = get_questions_serps()
     doc_snippet_entities = dict()
@@ -119,7 +117,7 @@ def entity_link_snippets():
         if index % 100 == 0:
             logger.info("Processed %d serps" % index)
     logger.info("Pickling the dictionary...")
-    with open(sys.argv[1], 'w') as out:
+    with open(snippet_entities_file, 'wx') as out:
         pickle.dump(doc_snippet_entities, out)
     logger.info("Pickling the dictionary DONE!")
 
@@ -182,20 +180,60 @@ def get_question_terms():
     print question_tokens
 
 
+def main_parse():
+    document_content_file = globals.config.get('WebSearchFeatures', 'documents-content-file')
+    parser = CoreNLPParser.init_from_config()
+    question_serps = get_questions_serps()
+    print datetime.now()
+    with open(document_content_file, 'wx') as out_file:
+        index = 0
+        for serp in question_serps.itervalues():
+            for doc in serp[:10]:
+                content = doc.content()
+                if len(content) > 0:
+                    document = (doc.url, parser.parse(content))
+                    pickle.dump(document, out_file)
+            print "Query #", index, datetime.now()
+            index += 1
+
+
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('--config',
+                        default='config.cfg',
+                        help='The configuration file to use.')
+    args = parser.parse_args()
+    globals.read_configuration(args.config)
+
     #get_number_of_external_entities()
 
     # get_question_terms()
 
-    globals.read_configuration('config.cfg')
-    linker = globals.get_entity_linker()
-    parser = globals.get_parser()
-    while True:
-        print "Enter text: "
-        line = sys.stdin.readline()
-        tokens = parser.parse(line).tokens
-        for en in linker.identify_entities_in_tokens(tokens, line):
-            print en.entity.id, en.entity.get_notable_type()
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- PARSE DOCUMENT CONTENT AND CACHE PARSE: BEGIN
+    # main_parse()
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- PARSE DOCUMENT CONTENT AND CACHE PARSE: END
+
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- GET DOCUMENT CONTENT ENTITIES: BEGIN
+    main_doc_entities_from_content()
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- GET DOCUMENT CONTENT ENTITIES: END
+
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- GET DOCUMENT SNIPPET ENTITIES: BEGIN
+    #entity_link_snippets()
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- GET DOCUMENT SNIPPET ENTITIES: END
+
+
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+    # globals.read_configuration('config.cfg')
+    # linker = globals.get_entity_linker()
+    # parser = globals.get_parser()
+    # while True:
+    #     print "Enter text: "
+    #     line = sys.stdin.readline()
+    #     tokens = parser.parse(line).tokens
+    #     for en in linker.identify_entities_in_tokens(tokens, line):
+    #         print en.entity.id, en.entity.get_notable_type()
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 
     # test_new_entity_linker()
