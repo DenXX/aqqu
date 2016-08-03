@@ -97,10 +97,10 @@ def generate_text_based_features(candidate):
     for similarity_name, similarity in similarity_functions:
         # Computing document-answer similarities for each representation.
         document_answer_similarities = {}
-        for doc_vector in documents_vectors:
-            for representation in representations:
-                if representation not in document_answer_similarities:
-                    document_answer_similarities[representation] = []
+        for representation in representations:
+            if representation not in document_answer_similarities:
+                document_answer_similarities[representation] = []
+            for doc_vector in documents_vectors:
                 document_answer_similarities[representation].append(similarity(representation,
                                                                                doc_vector[representation],
                                                                                answers_vectors[representation]))
@@ -116,10 +116,11 @@ def generate_text_based_features(candidate):
         # logger.info("Snippet-answer similarity...")
         # Computing snippet-answer similarities for each representation.
         snippet_answer_similarities = {}
-        for snippet_vector in snippets_vectors:
-            for representation in representations:
-                if representation not in snippet_answer_similarities:
-                    snippet_answer_similarities[representation] = []
+        for representation in representations:
+            if representation not in snippet_answer_similarities:
+                snippet_answer_similarities[representation] = []
+
+            for snippet_vector in snippets_vectors:
                 snippet_answer_similarities[representation].append(similarity(representation,
                                                                               snippet_vector[representation],
                                                                               answers_vectors[representation]))
@@ -299,7 +300,8 @@ def generate_document_vectors(question_text, question_tokens2pos, questions_sear
 
 def create_document_vectors_cache(questions):
     cache_file = globals.config.get('WebSearchFeatures', 'document-vectors')
-    with open(cache_file, 'w') as out:
+    logger.info("Caching document vectors...")
+    with open(cache_file, 'wx') as out:
         for index, question in enumerate(questions):
             question_token2pos = dict((token, [1, ]) for token in tokenize(question))
             generate_document_vectors(question, question_token2pos, get_questions_serps())
@@ -312,4 +314,6 @@ if __name__ == "__main__":
     logging.basicConfig(format='%(asctime)s : %(levelname)s '
                                ': %(module)s : %(message)s',
                         level=logging.INFO)
-    globals.read_configuration('config.cfg')
+    globals.read_configuration('config_wikipedia.cfg')
+    serps = get_questions_serps()
+    create_document_vectors_cache(serps.keys())

@@ -125,8 +125,8 @@ def diff_text_pickle(text_results, pickle_results):
     baseline_average_f1 = []
     average_combined_f1 = []
     for query in system_queries:
-        if query.utterance not in questions_filter:
-            continue
+        #if query.utterance not in questions_filter:
+        #    continue
 
         question = query.utterance
         answer = query.eval_candidates[0].prediction if query.eval_candidates else []
@@ -173,7 +173,7 @@ def print_all_non_perfect(system_queries):
 
 
 if __name__ == "__main__":
-    diff_pickles(argv[1], argv[2])
-    # diff_text_pickle(argv[1], argv[2])
+    #diff_pickles(argv[1], argv[2])
+    diff_text_pickle(argv[1], argv[2])
     # pickle_to_text(argv[1])
     # print_all_non_perfect(argv[1])
