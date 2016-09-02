@@ -94,7 +94,7 @@ class Ranker(object):
         y_score = y_candidate.rank_score.score
         return cmp(x_score, y_score)
 
-    def rank_query_candidates(self, query_candidates, key=lambda x: x):
+    def rank_query_candidates(self, query_candidates, key=lambda x: x, utterance=""):
         """Rank query candidates by scoring and then sorting them.
 
         :param query_candidates:
@@ -109,6 +109,9 @@ class Ranker(object):
                                    cmp=self.compare,
                                    reverse=True)
         return ranked_candidates
+
+    def close(self):
+        pass
 
 
 class MLModel(object):
@@ -524,7 +527,7 @@ class AccuModel(MLModel, Ranker):
             for (x, y), s in zip(pairs, c):
                 self.cmp_cache[(x, y)] = s
 
-    def rank_query_candidates(self, query_candidates, key=lambda x: x):
+    def rank_query_candidates(self, query_candidates, key=lambda x: x, utterance=""):
         """Rank query candidates by scoring and then sorting them.
 
         :param query_candidates:
@@ -1131,7 +1134,7 @@ class LiteralRankerFeatures(object):
                 score,
                 self.result_size)
 
-    def rank_query_candidates(self, query_candidates, key=lambda x: x):
+    def rank_query_candidates(self, query_candidates, key=lambda x: x, utterance=""):
         """Rank query candidates by scoring and then sorting them.
 
         :param query_candidates:

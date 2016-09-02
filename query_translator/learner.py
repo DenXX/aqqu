@@ -13,7 +13,7 @@ import logging
 import globals
 import scorer_globals
 from query_translator.ranker import MLModel
-from query_translator.translator import QueryTranslator
+from query_translator.translator import CandidateGenerator
 from evaluation import EvaluationQuery, load_eval_queries, \
     evaluate_translator, evaluate
 import os
@@ -101,7 +101,8 @@ def evaluate_scorer(test_queries, scorer_obj, print_ranked_candidates=False):
     for index, query in enumerate(test_queries):
         query.eval_candidates = scorer_obj.rank_query_candidates(
             query.eval_candidates,
-            key=lambda x: x.query_candidate)
+            key=lambda x: x.query_candidate,
+            utterance=query.utterance)
         if (index + 1) % 100 == 0:
             logger.info("%d questions answered" % (index + 1))
     res, queries = evaluate(test_queries)
@@ -182,7 +183,7 @@ def get_evaluated_queries(dataset, cached, parameters, n_top=2000):
     if not queries:
         # Note: we use the default scorer here, but with parameters
         # of the selected scorer.
-        translator = QueryTranslator.init_from_config()
+        translator = CandidateGenerator.get_from_config(globals.config)
         candidate_scorer = ranker.LiteralRanker('DefaultScorer')
         candidate_scorer.parameters = parameters
         translator.set_scorer(candidate_scorer)
@@ -229,6 +230,7 @@ def train(scorer_name, cached):
     scorer_obj.store_model()
     scorer_obj.print_model()
     logger.info("Done training.")
+    scorer_obj.close()
 
 
 def test(scorer_name, test_dataset, cached, avg_runs=1):
@@ -271,6 +273,7 @@ def test(scorer_name, test_dataset, cached, avg_runs=1):
     logger.info("Average results over %s runs: " % avg_runs)
     for k in sorted(result.keys()):
         logger.info("%s: %.4f" % (k, result[k]))
+    scorer_obj.close()
 
 
 def eval_print(scorer_name, test_dataset, cached):

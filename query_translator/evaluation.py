@@ -11,6 +11,7 @@ import logging
 import random
 import json
 import time
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -34,15 +35,17 @@ class EvaluationQuery(object):
     provide.
     """
 
-    def __init__(self, q_id, utterance, target_result, target_sparql):
+    def __init__(self, q_id, utterance, target_result, target_sparql, target_pattern=None):
         self.id = q_id
         self.utterance = utterance
         self.target_result = target_result
+        self.target_patterns = target_pattern
         self.target_sparql = target_sparql
         # When processed, the ranked list of candidates returned.
         # TODO(Elmar): RENAME THIS!!!! VERY CONFUSING!!!
         self.eval_candidates = []
         self.oracle_position = -1
+        self.partial_oracle_position = -1
         # These are the final results for this query.
         # If the query has at least one candidate, these are identical
         # to the first candidate's results.
@@ -59,6 +62,7 @@ class EvaluationQuery(object):
         :return:
         """
         self.oracle_position = -1
+        self.partial_oracle_position = -1
         self.precision = 0.0
         self.recall = 0.0
         self.f1 = 0.0
@@ -73,7 +77,19 @@ class EvaluationQuery(object):
         d = dict(self.__dict__)
         d['false_positives'] = []
         d['false_negatives'] = []
+        d['partial_oracle_position'] = -1
         return d
+
+    def __setstate__(self, d):
+        """
+        We do this for unpickling. target_pattern attribute was added later, so older pickles don't
+        have it.
+        :param d:
+        :return:
+        """
+        self.__dict__.update(d)
+        if 'target_pattern' not in d:
+            self.target_patterns = None
 
     @staticmethod
     def queries_from_json_file(filename):
@@ -82,7 +98,8 @@ class EvaluationQuery(object):
             return EvaluationQuery(int(q['id']),
                                    q['utterance'],
                                    q['result'],
-                                   q.get('targetOrigSparql', None))
+                                   q.get('targetOrigSparql', None),
+                                   q.get('patterns_raw', None))
         eval_queries = json.load(open(filename, 'r'),
                                  object_hook=object_decoder,
                                  encoding='utf-8')
@@ -134,7 +151,7 @@ def evaluate_translator(translator, queries, n_queries=9999,
     module and the list of queries in the form of dictionaries holding
     evaluation information.
     :type queries: list[EvaluationQuery]
-    :type translator: query_translator.translator.QueryTranslator
+    :type translator: query_translator.translator.SparqlQueryTranslator
     :rtype: (EvaluationResult, list[EvaluationQuery])
     :param n_queries:
     :param ignore_howmany:
@@ -256,8 +273,24 @@ def parse_to_set(result_list):
         if r_date:
             result_set.add(r_date)
             continue
+        if isinstance(r, str):
+            r = r.decode('utf-8')
         result_set.add(r)
     return result_set
+
+
+def parse_patterns(patterns):
+    if patterns is None:
+        return set()
+    res = set()
+    for pattern in set(patterns):
+        try:
+            res.add(re.compile(pattern, re.IGNORECASE))
+        except Exception as ex:
+            logger.error(ex.message)
+            pass
+
+    return res
 
 
 def evaluate_single_candidate(candidate, eval_query):
@@ -273,7 +306,9 @@ def evaluate_single_candidate(candidate, eval_query):
     false_positives = []
     false_negatives = []
     gold_result_set = parse_to_set(eval_query.target_result)
+    gold_patterns_set = parse_patterns(eval_query.target_patterns) if eval_query.target_patterns else None
     prediction_set = parse_to_set(candidate.prediction)
+
     # This is fast but ignores the case where entities with identical name
     # occur multiple times but in different quantities in predicted and
     # gold list. The effect overall is negligible (<0.1%), however.
@@ -283,9 +318,14 @@ def evaluate_single_candidate(candidate, eval_query):
     num_gold = len(gold_result_set)
     num_predicted = len(prediction_set)
     for res in prediction_set:
-        if res in gold_result_set:
+        res_str = res.encode("utf-8") if isinstance(res, unicode) else str(res)
+        if (gold_patterns_set is not None and any(pattern.search(str(res_str)) for pattern in gold_patterns_set)) or \
+                (res in gold_result_set):
             true_positives += 1.0
-            gold_result_set.remove(res)
+            if res in gold_result_set:
+                gold_result_set.remove(res)
+            if gold_patterns_set is not None:
+                gold_patterns_set = set([pattern for pattern in gold_patterns_set if pattern.search(str(res_str)) is None])
         else:
             false_positives.append(res)
     false_negatives.extend(gold_result_set)
@@ -361,6 +401,11 @@ def evaluate(queries, output_file="eval_out.log"):
     EvaluationResult = namedtuple('EvaluationResult', ['avg_precision',
                                                        'avg_recall',
                                                        'avg_f1',
+                                                       'partial_accuracy',
+                                                       'partial_precision',
+                                                       'partial_recall',
+                                                       'partial_f1',
+                                                       'mrr',
                                                        'macro_f1',
                                                        'macro_f1_xao',
                                                        'avg_precision_xao',
@@ -371,6 +416,7 @@ def evaluate(queries, output_file="eval_out.log"):
                                                        'num_questions_no_answer',
                                                        'accuracy',
                                                        'oracle_accuracy',
+                                                       'oracle_partial_accuracy',
                                                        'oracle_avg_f1',
                                                        'oracle_top_2',
                                                        'oracle_top_3',
@@ -389,6 +435,7 @@ def evaluate(queries, output_file="eval_out.log"):
         q.reset_results()
         gold_results = q.target_result
         candidates = q.eval_candidates
+
         if len(gold_results) == 0:
             num_q_no_answer += 1
         # We have no gold answer and no candidates.
@@ -412,7 +459,9 @@ def evaluate(queries, output_file="eval_out.log"):
             num_candidates += len(candidates)
             for i, prediction in enumerate(candidates):
                 candidate_eval = prediction.evaluation_result
-                # Only compute if not already computed.
+
+                # Only compute if not already computed. This helps to evaluate newly created candidates, that weren't
+                # cached.
                 if not candidate_eval:
                     candidate_eval = evaluate_single_candidate(prediction, q)
                     prediction.evaluation_result = candidate_eval
@@ -427,13 +476,16 @@ def evaluate(queries, output_file="eval_out.log"):
                 if q.oracle_f1 < candidate_eval.f1:
                     q.oracle_f1 = candidate_eval.f1
                     q.oracle_position = i + 1
+                if candidate_eval.f1 > 0 and q.partial_oracle_position == -1:
+                    q.partial_oracle_position = i + 1
     num_queries = len(queries)
     num_unanswered_queries = float(len([q for q in queries
                                         if not q.eval_candidates]))
     num_answered_queries = float(len([q for q in queries if q.eval_candidates]))
     completely_correct = float(len([q for q in queries if q.f1 == 1.0]))
-    oracle_positions = [q.oracle_position
-                        for q in queries if q.oracle_position > 0]
+    partially_correct = float(len([q for q in queries if q.f1 > 0.0]))
+    oracle_positions = [q.oracle_position for q in queries if q.oracle_position > 0]
+    has_oracle_answer = float(len(oracle_positions))
     avg_oracle_position = sum(oracle_positions) / float(len(oracle_positions)) if len(oracle_positions) > 0 else 0.0
     oracle_top_2 = len([p for p in oracle_positions if p <= 2])
     oracle_top_3 = len([p for p in oracle_positions if p <= 3])
@@ -441,6 +493,7 @@ def evaluate(queries, output_file="eval_out.log"):
     oracle_top_10 = len([p for p in oracle_positions if p <= 10])
     oracle_top_100 = len([p for p in oracle_positions if p <= 100])
     perfect_with_oracle = len([q for q in queries if q.oracle_f1 == 1.0])
+    oracle_partial_accuracy = has_oracle_answer / num_queries
     oracle_accuracy = float(perfect_with_oracle) / num_queries
     oracle_top_2 = float(oracle_top_2) / num_queries
     oracle_top_3 = float(oracle_top_3) / num_queries
@@ -462,12 +515,17 @@ def evaluate(queries, output_file="eval_out.log"):
 
     # Exact accuracy.
     accuracy = float(completely_correct) / num_queries
+    partial_accuracy = partially_correct / num_queries
+    partial_precision = partially_correct / num_answered_queries if num_answered_queries > 0 else 1.0
+    partial_recall = partially_correct / num_queries
+    partial_f1 = 2 * partial_precision * partial_recall / (partial_precision + partial_recall) if (partial_precision + partial_recall) > 0 else 0.0
+    mrr = sum([1.0 / q.partial_oracle_position for q in queries if q.partial_oracle_position > 0]) / num_queries
 
     # Xao et al. ignore unanswered queries when computing the precision
     # We previously set the precision of those to 0.0, so only adjust
     # denominator
     average_precision_xao = (sum([q.precision for q in queries]) /
-                             (num_queries - num_unanswered_queries))
+                             (num_queries - num_unanswered_queries)) if num_queries - num_unanswered_queries > 0 else 0.0
     macro_f1_xao = 0
     if average_precision_xao + average_recall > 0:
         macro_f1_xao = (2 * average_precision_xao * average_recall /
@@ -476,7 +534,7 @@ def evaluate(queries, output_file="eval_out.log"):
     # Scores like Kwiatowski et al.:
     # Precision: the percentage of produced queries with correct answers
     # Recall: the percent of total questions answered correctly
-    precision_kw = completely_correct / num_answered_queries
+    precision_kw = completely_correct / num_answered_queries if num_answered_queries > 0 else 0.0
     recall_kw = completely_correct / num_queries
     f1_kw = 0.0
     if precision_kw + recall_kw > 0:
@@ -488,6 +546,11 @@ def evaluate(queries, output_file="eval_out.log"):
     overall_result = EvaluationResult(average_precision,
                                       average_recall,
                                       average_f1,
+                                      partial_accuracy,
+                                      partial_precision,
+                                      partial_recall,
+                                      partial_f1,
+                                      mrr,
                                       macro_f1,
                                       macro_f1_xao,
                                       average_precision_xao,
@@ -498,6 +561,7 @@ def evaluate(queries, output_file="eval_out.log"):
                                       num_q_no_answer,
                                       accuracy,
                                       oracle_accuracy,
+                                      oracle_partial_accuracy,
                                       oracle_average_f1,
                                       oracle_top_2,
                                       oracle_top_3,

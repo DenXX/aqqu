@@ -8,7 +8,7 @@ Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 """
 import copy
 import os
-import sys
+from abc import ABCMeta, abstractmethod
 from itertools import product
 
 from answer_type import AnswerTypeIdentifier
@@ -19,7 +19,7 @@ import time
 import globals
 import collections
 
-from query_translator.features import FeatureExtractor, get_grams_feats, get_n_grams_features
+from query_translator.features import get_n_grams_features
 from text2kb.utils import avg
 
 logger = logging.getLogger(__name__)
@@ -59,28 +59,60 @@ class Query:
             self.original_query = text
 
 
+class CandidateGenerator(object):
+    """
+    Abstract class for all candidate generators.
+    """
+    __metaclass__ = ABCMeta
 
-class QueryTranslator(object):
+    def __init__(self, scorer, **kwargs):
+        self.scorer = scorer
 
-    def __init__(self, sparql_backend,
-                 query_extender,
-                 entity_linker,
-                 parser,
-                 scorer_obj,
-                 ngram_notable_types_npmi=None,
-                 notable_types_npmi_threshold=0.5):
-        self.sparql_backend = sparql_backend
-        self.query_extender = query_extender
-        self.entity_linker = entity_linker
-        self.parser = parser
-        self.scorer = scorer_obj
-        self.ngram_notable_types_npmi = ngram_notable_types_npmi
-        self.query_extender.set_parameters(scorer_obj.get_parameters())
-        self.notable_types_npmi_threshold = notable_types_npmi_threshold
+    @abstractmethod
+    def generate_candidates(self, query_text):
+        pass
 
-    @staticmethod
-    def init_from_config():
-        config_params = globals.config
+    def translate_and_execute_query(self, query, n_top=200):
+        """
+        Generates candidate answers for the given query.
+        :param query: Query to generate answer candidates for.
+        :param n_top: The number of top candidates to keep. The top is determined using the provided scorer object.
+        :return: A list of TranslationResult objects.
+        """
+
+        TranslationResult = collections.namedtuple('TranslationResult',
+                                                   ['query_candidate',
+                                                    'query_results_str'],
+                                                   verbose=False)
+        start_time = time.time()
+        # Parse query.
+        results = []
+        queries_candidates = self.generate_candidates(query)
+        logger.info("Ranking %s query candidates" % len(queries_candidates))
+        ranker = self.get_scorer()
+        ranked_candidates = ranker.rank_query_candidates(queries_candidates)
+        logger.info("Fetching results for all candidates.")
+        n_total_results = 0
+        if len(ranked_candidates) > n_top:
+            logger.info("Truncating returned candidates to %s." % n_top)
+        for query_candidate in ranked_candidates[:n_top]:
+            query_results_str = query_candidate.get_results_text()
+            n_total_results += len(query_results_str)
+            result = TranslationResult(query_candidate, query_results_str)
+            results.append(result)
+        logger.info("Fetched a total of %s results in %.2f ms." % (n_total_results, (time.time() - start_time)))
+        logger.info("Done translating and executing: %s." % query)
+        return results
+
+    def get_scorer(self):
+        return self.scorer
+
+    def set_scorer(self, scorer):
+        if scorer is not None:
+            self.scorer = scorer
+
+    @classmethod
+    def get_from_config(cls, config_params):
         sparql_backend = globals.get_sparql_backend(config_params)
         query_extender = QueryCandidateExtender.init_from_config()
         entity_linker = globals.get_entity_linker()
@@ -98,10 +130,38 @@ class QueryTranslator(object):
             except IOError as exc:
                 logger.error("Error reading types model: %s" % str(exc))
                 ngram_notable_types_npmi = None
-        return QueryTranslator(sparql_backend, query_extender,
-                               entity_linker, parser, scorer_obj,
-                               ngram_notable_types_npmi,
-                               notable_types_npmi_threshold)
+
+        return SparqlQueryTranslator(sparql_backend, query_extender,
+                                     entity_linker, parser, scorer_obj,
+                                     ngram_notable_types_npmi,
+                                     notable_types_npmi_threshold)
+
+
+class DummyCandidateGenerator(CandidateGenerator):
+    def __init__(self, scorer):
+        CandidateGenerator.__init__(self, scorer)
+
+    def generate_candidates(self, query_text):
+        return []
+
+
+class SparqlQueryTranslator(CandidateGenerator):
+
+    def __init__(self, sparql_backend,
+                 query_extender,
+                 entity_linker,
+                 parser,
+                 scorer_obj,
+                 ngram_notable_types_npmi=None,
+                 notable_types_npmi_threshold=0.5):
+        CandidateGenerator.__init__(self, scorer_obj)
+        self.sparql_backend = sparql_backend
+        self.query_extender = query_extender
+        self.entity_linker = entity_linker
+        self.parser = parser
+        self.ngram_notable_types_npmi = ngram_notable_types_npmi
+        self.query_extender.set_parameters(scorer_obj.get_parameters())
+        self.notable_types_npmi_threshold = notable_types_npmi_threshold
 
     def set_scorer(self, scorer):
         """Sets the parameters of the translator.
@@ -110,15 +170,10 @@ class QueryTranslator(object):
         :return:
         """
         # TODO(Elmar): should this be a parameter of a function call?
-        self.scorer = scorer
+        CandidateGenerator.set_scorer(self, scorer)
         self.query_extender.set_parameters(scorer.get_parameters())
 
-    def get_scorer(self):
-        """Returns the current parameters of the translator.
-        """
-        return self.scorer
-
-    def translate_query(self, query_text):
+    def generate_candidates(self, query_text):
         """
         Perform the actual translation.
         :param query_text:
@@ -126,13 +181,16 @@ class QueryTranslator(object):
         :param entity_oracle:
         :return:
         """
+        num_sparql_queries = self.sparql_backend.num_queries_executed
+        sparql_query_time = self.sparql_backend.total_query_time
+
         # Parse query.
         logger.info("Translating query: %s." % query_text)
         start_time = time.time()
         # Parse the query.
         query = self.parse_and_identify_entities(query_text)
         # Set the relation oracle.
-        query.relation_oracle = self.scorer.get_parameters().relation_oracle
+        query.relation_oracle = self.get_scorer().get_parameters().relation_oracle
         # Identify the target type.
         target_identifier = AnswerTypeIdentifier()
         target_identifier.identify_target(query)
@@ -150,6 +208,13 @@ class QueryTranslator(object):
         candidates = ert_matches + ermrt_matches + ermrert_matches
         # Extend existing candidates, e.g. by adding answer entity type filters.
         candidates = self.extend_candidates(candidates)
+
+        translation_time = (self.sparql_backend.total_query_time - sparql_query_time) * 1000
+        num_sparql_queries = self.sparql_backend.num_queries_executed - num_sparql_queries
+        avg_query_time = translation_time / (num_sparql_queries + 0.001)
+        logger.info("Translation executed %s queries in %.2f ms."
+                    " Average: %.2f ms." % (num_sparql_queries,
+                                            translation_time, avg_query_time))
         return candidates
 
     def extend_candidates(self, candidates):
@@ -160,7 +225,7 @@ class QueryTranslator(object):
         :return: A new set of candidates.
         """
         extra_candidates = []
-        add_types_filters =\
+        add_types_filters = \
             globals.config.get('QueryCandidateExtender', 'add-notable-types-filter-templates', '') == "True"
         if add_types_filters and self.ngram_notable_types_npmi and candidates:
             for candidate in candidates:
@@ -208,61 +273,28 @@ class QueryTranslator(object):
         # Create a query object.
         query = Query(query_text)
         query.query_tokens = tokens
-        if not self.scorer.get_parameters().entity_oracle:
+        if not self.get_scorer().get_parameters().entity_oracle:
             entities = self.entity_linker.identify_entities_in_tokens(
                 query.query_tokens, text=query_text)
         else:
-            entity_oracle = self.scorer.get_parameters().entity_oracle
+            entity_oracle = self.get_scorer().get_parameters().entity_oracle
             entities = entity_oracle.identify_entities_in_tokens(
                 query.query_tokens,
                 self.entity_linker)
         query.identified_entities = entities
         return query
 
+
+class WebSearchCandidateGenerator(CandidateGenerator):
+    """
+    Generates candidate answers by identifying entities mentioned in search results snippets.
+    """
+    def __init__(self, scorer):
+        CandidateGenerator.__init__(self, scorer)
+
     def translate_and_execute_query(self, query, n_top=200):
-        """
-        Translates the query and returns a list
-        of namedtuples of type TranslationResult.
-        :param query:
-        :return:
-        """
-        TranslationResult = collections.namedtuple('TranslationResult',
-                                                   ['query_candidate',
-                                                    'query_results_str'],
-                                                   verbose=False)
-        # Parse query.
-        results = []
-        num_sparql_queries = self.sparql_backend.num_queries_executed
-        sparql_query_time = self.sparql_backend.total_query_time
-        queries_candidates = self.translate_query(query)
-        translation_time = (self.sparql_backend.total_query_time - sparql_query_time) * 1000
-        num_sparql_queries = self.sparql_backend.num_queries_executed - num_sparql_queries
-        avg_query_time = translation_time / (num_sparql_queries + 0.001)
-        logger.info("Translation executed %s queries in %.2f ms."
-                    " Average: %.2f ms." % (num_sparql_queries,
-                                            translation_time, avg_query_time))
-        logger.info("Ranking %s query candidates" % len(queries_candidates))
-        ranker = self.scorer
-        ranked_candidates = ranker.rank_query_candidates(queries_candidates)
-        logger.info("Fetching results for all candidates.")
-        sparql_query_time = self.sparql_backend.total_query_time
-        n_total_results = 0
-        if len(ranked_candidates) > n_top:
-            logger.info("Truncating returned candidates to %s." % n_top)
-        for query_candidate in ranked_candidates[:n_top]:
-            query_results_str = query_candidate.get_results_text()
-            n_total_results += len(query_results_str)
-            result = TranslationResult(query_candidate, query_results_str)
-            results.append(result)
-        # This assumes that each query candidate uses the same SPARQL backend
-        # instance which should be the case at the moment.
-        result_fetch_time = (self.sparql_backend.total_query_time - sparql_query_time) * 1000
-        avg_result_fetch_time = result_fetch_time / (len(results) + 0.001)
-        logger.info("Fetched a total of %s results in %s queries in %.2f ms."
-                    " Avg per query: %.2f ms." % (n_total_results, len(results),
-                                                  result_fetch_time, avg_result_fetch_time))
-        logger.info("Done translating and executing: %s." % query)
-        return results
+        pass
+
 
 class TranslatorParameters(object):
 
@@ -276,6 +308,8 @@ class TranslatorParameters(object):
         # When matching candidates, require that relations
         # match in some way in the question.
         self.require_relation_match = True
+        # Wheather to use web search to extract candidate answers.
+        self.web_search_candidates = False
 
 
 def get_suffix_for_params(parameters):
@@ -292,6 +326,8 @@ def get_suffix_for_params(parameters):
         suffix += "_arm"
     if not parameters.restrict_answer_type:
         suffix += "_atm"
+    if parameters.web_search_candidates:
+        suffix += "_websearch"
     return suffix
 
 

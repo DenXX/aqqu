@@ -10,7 +10,7 @@ import logging
 import globals
 import scorer_globals
 import sys
-from query_translator.translator import QueryTranslator
+from query_translator.translator import SparqlQueryTranslator
 
 logging.basicConfig(format="%(asctime)s : %(levelname)s "
                            ": %(module)s : %(message)s",
@@ -36,7 +36,7 @@ def main():
         logger.error("Valid rankers are: %s " % (" ".join(scorer_globals.scorers_dict.keys())))
     logger.info("Using ranker %s" % args.ranker_name)
     ranker = scorer_globals.scorers_dict[args.ranker_name]
-    translator = QueryTranslator.init_from_config()
+    translator = SparqlQueryTranslator.init_from_config()
     translator.set_scorer(ranker)
     while True:
         try:

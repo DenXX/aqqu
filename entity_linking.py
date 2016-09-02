@@ -1,4 +1,3 @@
-import scorer_globals
 from corenlp_parser.parser import CoreNLPParser
 from entity_linker.entity_linker import EntityLinker, WebSearchResultsExtenderEntityLinker
 from query_translator import translator
@@ -17,6 +16,40 @@ logging.basicConfig(format='%(asctime)s : %(levelname)s '
                            ': %(module)s : %(message)s',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def find_entity_mentions(text, use_tagme=False):
+    if use_tagme:
+        import urllib, httplib, json
+        params = urllib.urlencode({
+            # Request parameters
+            'text': text,
+        })
+
+        data = None
+        try:
+            host, port = globals.config.get("EntityLinker", "tagme-service-url").split(":")
+            conn = httplib.HTTPConnection(host, port)
+            conn.request("GET", "/get_entities?%s" % params)
+            response = conn.getresponse()
+            data = response.read()
+            conn.close()
+        except Exception as ex:
+            logger.error(ex.message)
+            return []
+        if not data:
+            return []
+        return [{'mid': e['entity'],
+                'name': e['entity'],
+                'surface_score': float(e['coherence']),
+                'score': float(e['rho']),
+                'positions': (e['start'], e['end']),
+                'count': 1} for e in json.loads(data)]
+    else:
+        entity_linker = globals.get_entity_linker()
+        parser = globals.get_parser()
+        tokens = parser.parse(text).tokens
+        return entity_linker.identify_entities_in_document(tokens, max_token_window=5, get_main_name=True)
 
 
 def main_entities():
@@ -96,7 +129,6 @@ def main_entity_link_text():
                     else:
                         entities[entity['mid']]['count'] += entity['count']
         print sorted(entities.values(), key=operator.itemgetter('count'), reverse=True)[:50]
-        # print sorted(tokens.items(), key=operator.itemgetter(1), reverse=True)[:50]
 
 
 def entity_link_snippets():
@@ -124,14 +156,15 @@ def entity_link_snippets():
 
 def test_new_entity_linker():
     globals.read_configuration('config.cfg')
-    from query_translator.translator import QueryTranslator
-    query_translator = QueryTranslator.init_from_config()
+    from query_translator.translator import SparqlQueryTranslator
+    query_translator = SparqlQueryTranslator.init_from_config()
     while True:
         question = sys.stdin.readline().strip()
         print "Translation: ", query_translator.translate_query(question)
 
 
 def get_number_of_external_entities():
+    import scorer_globals
     globals.read_configuration('config_webentity.cfg')
     parser = CoreNLPParser.init_from_config()
     entity_linker = WebSearchResultsExtenderEntityLinker.init_from_config()
@@ -168,6 +201,7 @@ def get_number_of_external_entities():
 
 
 def get_question_terms():
+    import scorer_globals
     globals.read_configuration('config_webentity.cfg')
     scorer_globals.init()
     datasets = ["webquestionstrain", "webquestionstest",]

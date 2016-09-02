@@ -13,6 +13,7 @@ import sys
 
 import re
 
+from query_translator.answer_candidate import AnswerCandidate
 from util import *
 import copy
 import globals
@@ -275,12 +276,13 @@ class DateRangeFilter:
             self.date_node.get_sparql_name(), self.to_var.get_sparql_name())
 
 
-class QueryCandidate:
+class QueryCandidate(AnswerCandidate):
     """
     The contained object pointing to a root node.
     """
 
     def __init__(self, query, sparql_backend, root_node=None):
+        AnswerCandidate.__init__(self)
         # The query we are translating.
         self.query = query
         # The SPARQL backend we used for generating this query candidate.

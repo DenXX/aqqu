@@ -5,10 +5,12 @@ Copyright 2015, University of Freiburg.
 
 Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 """
+import atexit
 import itertools
 import logging
 import re
 import operator
+import shelve
 import time
 from Levenshtein._levenshtein import jaro_winkler
 
@@ -34,7 +36,6 @@ STOPWORDS = {"a", "about", "above", "after", "again", "against", "all", "am", "a
              "when", "when's", "where", "where's", "which", "while", "who", "who's", "whom", "why", "why's", "with",
              "won't", "would", "wouldn't", "you", "you'd", "you'll", "you're", "you've", "your", "yours", "yourself",
              "yourselves"}
-
 
 class Entity(object):
     """An entity.
@@ -91,6 +92,8 @@ class KBEntity(Entity):
         if KBEntity._entity_ids is None:
             KBEntity._read_names()
         name = name.lower()
+        if isinstance(name, unicode):
+            name = name.encode("utf-8")
         if name in KBEntity._entity_ids:
             if keep_most_triples:
                 mids = sorted([(mid, KBEntity.get_entity_triples_count(mid)) for mid in KBEntity._entity_ids[name]],
@@ -106,6 +109,8 @@ class KBEntity(Entity):
     @staticmethod
     def get_entity_descriptions_by_name(name, keep_most_triples_only=False):
         name = name.lower()
+        if isinstance(name, unicode):
+            name = name.encode("utf-8")
         if KBEntity._entity_ids is None:
             KBEntity._read_names()
         return filter(lambda x: x, [KBEntity.get_entity_description(entity_id)
@@ -119,6 +124,8 @@ class KBEntity(Entity):
     def get_entity_name(mid):
         if KBEntity._entity_names is None:
             KBEntity._read_names()
+        if isinstance(mid, unicode):
+            mid = mid.encode("utf-8")
         if mid in KBEntity._entity_names:
             return KBEntity._entity_names[mid]
         return ""
@@ -137,6 +144,13 @@ class KBEntity(Entity):
         if mid:
             return KBEntity.get_notable_type(mid[0])
         return ""
+
+    @staticmethod
+    def close():
+        if KBEntity._entity_ids:
+            KBEntity._entity_ids.close()
+        if KBEntity._entity_names:
+            KBEntity._entity_names.close()
 
     def sparql_name(self):
         return self.id
@@ -170,20 +184,22 @@ class KBEntity(Entity):
         if KBEntity._entity_ids is None:
             import globals
             import gzip
-            descriptions_file = globals.config.get('EntityLinker', 'entity-names-file')
-            KBEntity._entity_ids = dict()
-            KBEntity._entity_names = dict()
-            logger.info("Reading entity names...")
-            with gzip.open(descriptions_file, 'r') as input_file:
-                for index, line in enumerate(input_file):
-                    triple = KBEntity.parse_freebase_string_triple(line)
-                    if triple is not None:
-                        name = triple[2].lower()
-                        if name not in KBEntity._entity_ids:
-                            KBEntity._entity_ids[name] = []
-                        KBEntity._entity_ids[name].append(triple[0])
-                        KBEntity._entity_names[triple[0]] = name
-            logger.info("Done reading entity names.")
+            KBEntity._entity_ids = shelve.open(globals.config.get('EntityLinker', 'entity-names-cache-file'))
+            KBEntity._entity_names = shelve.open(globals.config.get('EntityLinker', 'entity-ids-cache-file'))
+            if len(KBEntity._entity_ids) == 0:
+                names_file = globals.config.get('EntityLinker', 'entity-names-file')
+                logger.info("Reading entity names...")
+                with gzip.open(names_file, 'r') as input_file:
+                    for index, line in enumerate(input_file):
+                        triple = KBEntity.parse_freebase_string_triple(line)
+                        if triple is not None:
+                            name = triple[2]
+                            name_lower = name.lower().encode('utf-8')
+                            if name_lower not in KBEntity._entity_ids:
+                                KBEntity._entity_ids[name_lower] = []
+                            KBEntity._entity_ids[name_lower].append(triple[0])
+                            KBEntity._entity_names[triple[0].encode("utf-8")] = name
+                logger.info("Done reading entity names.")
 
     @staticmethod
     def _read_entity_counts():
@@ -553,12 +569,15 @@ class EntityLinker:
                                                                                        len(identified_entities)))
         return identified_entities
 
-    def identify_entities_in_document(self, document_content_tokens, min_surface_score=0.5, max_token_window=3):
+    def identify_entities_in_document(self, document_content_tokens,
+                                      min_surface_score=0.5,
+                                      max_token_window=3,
+                                      get_main_name=False):
         entities = self.identify_entities_in_tokens(document_content_tokens,
                                                     min_surface_score=min_surface_score,
                                                     max_token_window=max_token_window,
                                                     find_dates=False)
-        entities = ((entity.name, entity.surface_score, entity.score,
+        entities = ((entity.entity.get_main_name() if get_main_name else entity.name, entity.surface_score, entity.score,
                      entity.entity.id if isinstance(entity.entity, KBEntity) else entity.name,
                      entity.position) for entity in entities)
         res = []
@@ -820,6 +839,8 @@ def keep_entity(matched_tokens, entity_name, question_tokens):
 def get_string_distance(string1, string2):
     return jaro_winkler(string1, string2)
 
+
+atexit.register(KBEntity.close)
 
 if __name__ == '__main__':
     entity = KBEntity("Daniil Kharms", u"m.03lp80", 1.0, None)

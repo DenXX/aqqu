@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 FREEBASE_NS_PREFIX = "http://rdf.freebase.com/ns/"
 FREEBASE_SPARQL_PREFIX = "fb"
 FREEBASE_NAME_RELATION = "type.object.name"
+FREEBASE_WIKIPEDIA_TITLE_RELATION = "wikipedia.en_title"
 FREEBASE_NOTABLE_TYPE_RELATION = "common.topic.notable_for"
 FREEBASE_KEY_PREFIX = "http://rdf.freebase.com/key/"
 
