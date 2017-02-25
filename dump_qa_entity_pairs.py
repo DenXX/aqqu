@@ -43,7 +43,7 @@ def print_sparql_queries():
             if notable_types:
                 print notable_types
                 print query_candidate.graph_as_simple_string().encode("utf-8")
-                print query_candidate.to_sparql_query().encode("utf-8")
+                print query_candidate.get_candidate_query().encode("utf-8")
                 print "\n\n"
 
 

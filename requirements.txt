@@ -1,12 +1,12 @@
 Cython==0.22
-gensim==0.10.3
+gensim
 numpy==1.9.2
 python-dateutil==2.4.1
 scipy==0.15.1
 urllib3==1.10.2
-scikit-learn==0.16.0
+scikit-learn
 joblib==0.8.4
 beautifulsoup4==4.4.0
 justext==2.1.1
 html5lib
-python-Levenshtein=0.12
+python-Levenshtein==0.12

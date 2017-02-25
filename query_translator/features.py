@@ -79,11 +79,11 @@ def get_query_text_tokens(candidate, lemmatize=True, replace_entity=True):
     """
     # The set of all tokens for which an entity was identified.
     entity_tokens = set()
-    for em in candidate.matched_entities:
+    for em in candidate.get_matched_entities():
         entity_tokens.update(em.entity.tokens)
     query_text_tokens = ['STRTS']
     # Replace entity tokens with "ENTITY"
-    for t in candidate.query.query_tokens:
+    for t in candidate.get_query().query_tokens:
         if replace_entity and t in entity_tokens:
             # Don't replace if the previous token is an entity token
             if len(query_text_tokens) > 0 and query_text_tokens[-1] == 'ENTITY':
@@ -174,13 +174,13 @@ class FeatureExtractor(object):
         result_size = candidate.get_result_count()
         cardinality = 0
         # Each entity match represents a matched entity.
-        n_entity_matches = len(candidate.matched_entities)
+        n_entity_matches = len(candidate.get_matched_entities())
         em_surface_scores = []
         em_pop_scores = []
         n_entity_tokens = 0
         n_external_entities = 0
         external_count = 0
-        for em in candidate.matched_entities:
+        for em in candidate.get_matched_entities():
             # A threshold above which we consider the match a literal match.
             threshold = 0.8
             n_entity_tokens += len(em.entity.tokens) if not em.entity.is_external_entity() else 1
@@ -204,7 +204,7 @@ class FeatureExtractor(object):
         token_weak_match_score = defaultdict(float)
         token_word_match_score = defaultdict(float)
         token_derivation_match_score = defaultdict(float)
-        for rm in candidate.matched_relations:
+        for rm in candidate.get_matched_relations():
             if rm.name_match:
                 for (t, _) in rm.name_match.token_names:
                     token_name_match_score[t] += 1.0
@@ -246,15 +246,15 @@ class FeatureExtractor(object):
         # If we ignore entity features we need to compute coverage differently
         if not self.entity_features:
             coverage = (n_rel_tokens /
-                        float(len(candidate.query.query_tokens)))
+                        float(len(candidate.get_query().query_tokens)))
         else:
             coverage = ((n_rel_tokens + n_entity_tokens) /
-                        float(len(candidate.query.query_tokens)))
+                        float(len(candidate.get_query().query_tokens)))
         features = {}
         result_size_0 = 1 if result_size == 0 else 0
         result_size_1_to_20 = 1 if 1 <= result_size <= 20 else 0
         result_size_gt_20 = 1 if result_size >= 20 else 0
-        matches_answer_type = 1 if candidate.matches_answer_type else 0
+        matches_answer_type = 1 if candidate.is_match_answer_type() else 0
         if self.generic_features:
             if self.entity_features:
                 features.update({
@@ -297,12 +297,13 @@ class FeatureExtractor(object):
                 'result_size_gt_20': result_size_gt_20,
             })
 
-            if candidate.date_range_filter is not None:
-                features["has_date_range_filter"] = 1
-            if candidate.type_filter is not None:
-                features["has_type_filter"] = 1
-                features["type_filter_max_npmi_score"] = candidate.type_filter_max_npmi
-                features["type_filter_avg_npmi_score"] = candidate.type_filter_avg_npmi
+            if isinstance(candidate, QueryCandidate):
+                if candidate.date_range_filter is not None:
+                    features["has_date_range_filter"] = 1
+                if candidate.type_filter is not None:
+                    features["has_type_filter"] = 1
+                    features["type_filter_max_npmi_score"] = candidate.type_filter_max_npmi
+                    features["type_filter_avg_npmi_score"] = candidate.type_filter_avg_npmi
 
         # Extra features, not web search based, but potentially useful.
         # if self.generate_extra_features:

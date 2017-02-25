@@ -22,7 +22,7 @@ install-virtuoso:
 	@echo "Installation finished."
 
 start-parser:
-	cd corenlp-frontend; ant dist; ant run
+	cd corenlp-frontend; /home/dsavenk/ir/src/apache-ant-1.10.1/bin/ant dist; /home/dsavenk/ir/src/apache-ant-1.10.1/bin/ant run
 
 start-virtuoso:
 	$(VIRTUOSO_BINARY) -f +configfile virtuoso-db/virtuoso.ini

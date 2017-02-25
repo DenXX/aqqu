@@ -9,257 +9,13 @@ Copyright 2015, University of Freiburg.
 Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 """
 import logging
-import sys
 
-import re
-
-from query_translator.answer_candidate import AnswerCandidate
-from util import *
+from query_translator.answer_candidate import AnswerCandidate, EntityMatch
 import copy
 import globals
 from entity_linker.entity_linker import KBEntity
-import weakref
 
 logger = logging.getLogger(__name__)
-
-_year_pattern = re.compile("[0-9]+")
-
-# Note: might be a place for ABC
-class RelationMatch:
-    """
-    Describes a match of a relation.
-    Supports iterative construction by first instantiating
-    and then adding tokens that matched in different parts
-    with different scores.
-    """
-
-    def __init__(self, relation):
-        # The tokens that matched the relation
-        self.tokens = set()
-        # The name of the relation that matched
-        # In the case of a mediated relation, this can be a tuple
-        # (rel_a, rel_b) for the structure "rel_a -> M -> rel_b"
-        self.relation = relation
-        # The match objects, lazily instantiated
-        # when adding matches.
-        self.words_match = None
-        self.name_match = None
-        self.name_weak_match = None
-        self.count_match = None
-        self.derivation_match = None
-        # For target relations we track the cardinality
-        # of a relation. This is only set for target relations.
-        self.cardinality = -1
-
-    def is_empty(self):
-        """
-        Returns False if the match matched any tokens,
-        else returns True.
-        :return:
-        """
-        return len(self.tokens) == 0
-
-    def add_count_match(self, count):
-        """
-        Add a count for the relation.
-        :param token:
-        :param score:
-        :return:
-        """
-        self.count_match = CountMatch(count)
-
-    def add_relation_words_match(self, token, score):
-        """
-        Add a token and score that matched the relation words.
-        :param token:
-        :param score:
-        :return:
-        """
-        self.tokens.add(token)
-        if not self.words_match:
-            self.words_match = WordsMatch([(token, score)])
-        else:
-            self.words_match.add_match((token, score))
-
-    def add_relation_name_match(self, token, name):
-        """
-        Add a token and score that matched the relation words.
-        :param token:
-        :param score:
-        :return:
-        """
-        self.tokens.add(token)
-        if not self.name_match:
-            self.name_match = NameMatch([(token, name)])
-        else:
-            self.name_match.add_match((token, name))
-
-    def add_derivation_match(self, token, name):
-        """Add a token and and the name it matched via some derivation.
-        :param token:
-        :param score:
-        :return:
-        """
-        self.tokens.add(token)
-        if not self.derivation_match:
-            self.derivation_match = DerivationMatch([(token, name)])
-        else:
-            self.derivation_match.add_match((token, name))
-
-    def add_relation_name_weak_match(self, token, name, score):
-        """
-        Add a token and score that matched the relation words.
-        :param token:
-        :param score:
-        :return:
-        """
-        self.tokens.add(token)
-        if not self.name_weak_match:
-            self.name_weak_match = NameWeakMatch([(token, name, score)])
-        else:
-            self.name_weak_match.add_match((token, name, score))
-
-    def __deepcopy__(self, memo):
-        # No need to copy the matches. They remain unchanged after
-        # RelationMatch was created.
-        m = RelationMatch(self.relation)
-        m.words_match = self.words_match
-        m.name_match = self.name_match
-        m.name_weak_match = self.name_weak_match
-        return m
-
-    def as_string(self):
-        result = []
-        if self.name_match:
-            result.append(self.name_match.as_string())
-        if self.derivation_match:
-            result.append(self.derivation_match.as_string())
-        if self.words_match:
-            result.append(self.words_match.as_string())
-        if self.name_weak_match:
-            result.append(self.name_weak_match.as_string())
-        if self.count_match:
-            result.append(self.count_match.as_string())
-        indent = "\n  "
-        s = indent.join(result)
-        relation_name = self.relation
-        if isinstance(self.relation, tuple):
-            relation_name = ' -> '.join(self.relation)
-        return "%s:%s%s" % (relation_name, indent, s)
-
-
-class WordsMatch:
-    """
-    Describes a match against a list of tokens.
-    It has two lists: a list of matching tokens, and a list
-    with a score for each token indicating how well the corresponding
-    token matched.
-    """
-
-    def __init__(self, token_scores=[]):
-        # A list of tuples (word, score)
-        self.token_scores = token_scores
-
-    def add_match(self, token_score):
-        self.token_scores.append(token_score)
-
-    def as_string(self):
-        s = ','.join(["%s:%.4f" % (t.lemma, s)
-                      for t, s in self.token_scores])
-        return "RelationContext: %s" % s
-
-
-class DerivationMatch:
-    """A match against a derived word.
-
-    """
-
-    def __init__(self, token_names):
-        # A list of token, name tuples
-        # where token matched name via some derivation.
-        self.token_names = token_names
-
-    def add_match(self, token_name):
-        self.token_names.append(token_name)
-
-    def as_string(self):
-        s = ','.join(["%s=%s" % (t.lemma, n)
-                      for t, n in self.token_names])
-        return "DerivationMatch: %s" % s
-
-
-class CountMatch:
-    """
-    Describes a match using only the relation count of freebase.
-    """
-
-    def __init__(self, count):
-        # A list of tuples (word, score)
-        self.count = count
-
-    def as_string(self):
-        return "Count: %s" % self.count
-
-
-class NameMatch:
-    """
-    Describes a match of tokens in the relation name.
-    """
-
-    def __init__(self, token_names):
-        # A list of token, name tuples
-        # where token matched name.
-        self.token_names = token_names
-
-    def add_match(self, token_name):
-        self.token_names.append(token_name)
-
-    def as_string(self):
-        s = ','.join(["%s=%s" % (t.lemma, n)
-                      for t, n in self.token_names])
-        return "RelationName: %s" % s
-
-
-class NameWeakMatch:
-    """
-    Describes a match of tokens in the relation name with a weak
-    synonym.
-    """
-
-    def __init__(self, token_name_scores=[]):
-        # A list of tuples (token, name, score)
-        # where token matched in name with score.
-        self.token_name_scores = token_name_scores
-
-    def add_match(self, token_name_score):
-        self.token_name_scores.append(token_name_score)
-
-    def as_string(self):
-        s = ','.join(["%s=%s:%.2f" % (t.lemma, n, s)
-                      for t, n, s in self.token_name_scores])
-        return "RelationNameSynonym: %s" % s
-
-
-class EntityMatch:
-    """
-    Describes a match of an entity in the tokens.
-    """
-
-    def __init__(self, entity):
-        self.entity = entity
-        self.score = None
-
-    def __deepcopy__(self, memo):
-        # No need to copy the identified entity.
-        m = EntityMatch(self.entity)
-        m.score = self.score
-        return m
-
-    def as_string(self):
-        return self.entity.as_string()
-
-    def __repr__(self):
-        return self.as_string()
 
 
 class DateRangeFilter:
@@ -282,9 +38,7 @@ class QueryCandidate(AnswerCandidate):
     """
 
     def __init__(self, query, sparql_backend, root_node=None):
-        AnswerCandidate.__init__(self)
-        # The query we are translating.
-        self.query = query
+        AnswerCandidate.__init__(self, query)
         # The SPARQL backend we used for generating this query candidate.
         # Used to execute the query candidate (once the candidate is matched)
         self.sparql_backend = sparql_backend
@@ -296,13 +50,7 @@ class QueryCandidate(AnswerCandidate):
         self.root_node = root_node
         if root_node:
             self.nodes.append(root_node)
-        # A set of EntityMatches.
-        self.matched_entities = set()
-        # A set of RelationMatches.
-        self.matched_relations = set()
-        # Sets of matched and unmatched tokens so far.
-        self.matched_tokens = set()
-        self.unmatched_tokens = set(query.query_tokens)
+
         # The current point where we are trying to extend the pattern.
         self.current_extension = None
         # A history of extensions, needed to move back.
@@ -313,8 +61,6 @@ class QueryCandidate(AnswerCandidate):
         self._next_var = 0
         # A list of nodes that identify the "select" variables in a SPARQL query.
         self.target_nodes = None
-        # A score computed for this candidate.
-        self.rank_score = None
         # If the query candidate already uses an answer relation that represents a count,
         # this should be set to true. This avoids counting results in the SPARQL
         # query when the result relation already represents a count.
@@ -322,14 +68,6 @@ class QueryCandidate(AnswerCandidate):
         # Cache the result count, so that pickled candidates can access it.
         # A value of -1 indicates no result count exists yet.
         self.cached_result_count = -1
-        # An indicator whether the candidate matches the answer type
-        self.matches_answer_type = None
-        # Result of the given query
-        self.query_results = None
-        # Mids of the query results.
-        self.query_results_mids = None
-        # Notable types of answer entities.
-        self.answer_notable_types = None
         # Filter on date range
         self.date_range_filter = None
         # Filter based on results notable type.
@@ -344,7 +82,7 @@ class QueryCandidate(AnswerCandidate):
     def __str__(self):
         return ','.join(name.encode('utf-8') for name in self.get_entity_names()) +\
                '[' + ','.join(name.encode('utf-8') for name in self.get_relation_names()) + '] ' +\
-               ','.join(token.token.encode('utf-8') for token in self.matched_tokens) +\
+               ','.join(token.token.encode('utf-8') for token in self.get_covered_tokens()) +\
                (" > type filter: %s" % self.type_filter.encode("utf-8") if self.type_filter else "")
 
     def __repr__(self):
@@ -353,25 +91,8 @@ class QueryCandidate(AnswerCandidate):
     def get_relation_names(self):
         return sorted([r.name for r in self.relations])
 
-    def get_entity_names(self):
-        return sorted([me.entity.name for me in self.matched_entities])
-
-    def get_answer_notable_types(self):
-        """
-        Returns a list of notable types of each of the result entities.
-        :return:
-        """
-        if self.answer_notable_types is None:
-            self.answer_notable_types = []
-            for mid, answer in zip(self.get_results_mids(), self.get_results_text()):
-                if _year_pattern.match(answer) is not None:
-                    continue
-                self.answer_notable_types.append(KBEntity.get_notable_type(mid))
-        return self.answer_notable_types
-
-    def get_entity_scores(self):
-        entities = sorted([me.entity for me in self.matched_entities])
-        return [e.score for e in entities]
+    def is_match_answer_type(self):
+        return self.matches_answer_type
 
     def __getstate__(self):
         """
@@ -418,7 +139,7 @@ class QueryCandidate(AnswerCandidate):
             return self.cached_result_count
 
         if self.type_filter is None:
-            sparql_query = self.to_sparql_query(count_query=True)
+            sparql_query = self.get_candidate_query(count_query=True)
             query_result = self.sparql_backend.query_json(sparql_query)
             # The query result should have one row with one column which is a
             # number as result or 0 rows
@@ -441,14 +162,14 @@ class QueryCandidate(AnswerCandidate):
             self.cached_result_count = len(self.get_results_text())
             return self.cached_result_count
 
-    def get_result(self, include_name=True):
+    def _get_result(self, include_name=True):
         """
         Returns the results of the SPARQL
         query when executed against the sparql backend
         for this query candidate.
         :return:
         """
-        sparql_query = self.to_sparql_query(include_name=include_name)
+        sparql_query = self.get_candidate_query(include_name=include_name)
         res = self.sparql_backend.query_json(sparql_query)
         assert self.type_filter is None
         return res if res is not None else []
@@ -456,7 +177,7 @@ class QueryCandidate(AnswerCandidate):
     def get_results_text(self):
         if self.query_results is not None:
             return self.query_results
-        res = self.get_result(include_name=True)
+        res = self._get_result(include_name=True)
         self.query_results = []
         self.query_results_mids = []
         for r in res:
@@ -597,22 +318,9 @@ class QueryCandidate(AnswerCandidate):
     def set_date_range_filter(self, target_date, from_relation_node, to_relation_node):
         self.date_range_filter = DateRangeFilter(target_date, from_relation_node, to_relation_node)
 
-
     def set_new_extension(self, candidate_node):
         self.extension_history.append(candidate_node)
         self.current_extension = candidate_node
-
-    def add_relation_match(self, relation_match, allow_new_match=False):
-        self.matched_relations.add(relation_match)
-        self.matched_tokens.update(relation_match.tokens)
-        if not allow_new_match:
-            self.unmatched_tokens = self.unmatched_tokens - self.matched_tokens
-
-    def add_entity_match(self, entity_match):
-        self.matched_entities.add(entity_match)
-        self.matched_tokens.update(entity_match.entity.tokens)
-        self.unmatched_tokens = self.unmatched_tokens - set(
-            entity_match.entity.tokens)
 
     def __deepcopy__(self, memo):
         # Create a new empty query candidate
@@ -654,9 +362,9 @@ class QueryCandidate(AnswerCandidate):
         s += self.root_node.graph_as_simple_string(visited, indent + 2)
         return s
 
-    def to_sparql_query(self, targets=None, distinct=True,
-                        include_name=False, filter_target=True,
-                        limit=300, count_query=False):
+    def get_candidate_query(self, targets=None, distinct=True,
+                            include_name=False, filter_target=True,
+                            limit=300, count_query=False):
         """
         Returns a SPARQL query corresponding to this graph,
         or None if some error occurred.
@@ -800,13 +508,6 @@ class QueryCandidate(AnswerCandidate):
         self.root_node._collect_elements(elements)
         return elements
 
-    def covered_tokens(self):
-        """
-        Return the set of tokens covered by this candidate.
-                :return
-        """
-        return self.matched_tokens
-
     def default_quality_tuple(self):
         """
         Return a tuple representing the 'goodness' of the
@@ -818,7 +519,7 @@ class QueryCandidate(AnswerCandidate):
         for e in elements:
             if e.entity_match is not None:
                 match_score += e.entity_match.entity.score
-        return len(self.covered_tokens()), match_score
+        return len(self.get_covered_tokens()), match_score
 
 
 class QueryCandidateNode:
@@ -1070,7 +771,7 @@ def test():
     ae_af = QueryCandidateRelation('ae-af', c, source_node=root, target_node=af)
     af_ah = QueryCandidateRelation('af-ah', c, source_node=af, target_node=ah)
     ah_ae = QueryCandidateRelation('ah-ae', c, source_node=ah, target_node=root)
-    print c.to_sparql_query()
+    print c.get_candidate_query()
     x = QueryCandidate(query)
     root = QueryCandidateNode(':e:Albert_Einstein', 'm.123', x)
     x.root_node = root

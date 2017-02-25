@@ -1,4 +1,5 @@
 import httplib, json, logging, shelve, sys, operator, urllib
+from sys import stderr
 
 import globals
 # from entity_linking import find_entity_mentions
@@ -27,26 +28,31 @@ class BingWebSearchApi:
             'safesearch': 'Moderate',
         })
 
+        logger.info(params in self._web_search_cache)
         if params in self._web_search_cache:
-            logger.debug("Returning cached search results")
+            logger.info("Returning cached search results")
             return self._web_search_cache[params]
 
         data = None
         try:
-            logger.debug("Calling Bing Search API...")
+            logger.info("Calling Bing Search API...")
             conn = httplib.HTTPSConnection('api.cognitive.microsoft.com')
             conn.request("GET", "/bing/v5.0/search?%s" % params, "{body}", self.headers)
             response = conn.getresponse()
+            logger.info("Status: %d" % response.status)
             data = response.read()
             conn.close()
         except Exception as e:
-            print("[Errno {0}] {1}".format(e.errno, e.strerror))
+            logger.error("[Errno {0}] {1}".format(e.errno, e.strerror))
         finally:
+            logger.info("Storing... %s" % params)
             self._web_search_cache[params] = data
+            logger.info(params in self._web_search_cache)
             return data
 
     def close(self):
         if not isinstance(self._web_search_cache, dict):
+            self._web_search_cache.sync()
             self._web_search_cache.close()
 
 
@@ -85,22 +91,32 @@ class SentSearchApi:
 
 if __name__ == "__main__":
     import argparse
+    import scorer_globals
+    from query_translator.evaluation import EvaluationQuery
+
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--config',
                         default='config.cfg',
                         help='The configuration file to use.')
     args = parser.parse_args()
     globals.read_configuration(args.config)
-    searcher = SentSearchApi()
+    scorer_globals.init()
 
-    while True:
-        print "Type question: "
-        question = sys.stdin.readline()
-        if len(question.strip()) == 0:
-            break
-        question, mids, topn = question.split("\t")
-        mids = mids.split()
-        print searcher.search(question, mids, topn)
+    searcher = BingWebSearchApi(globals.config.get("WebSearchAnswers", "bing-api-key"), use_search_cache=False)
 
+    datasets = ["trecqa_train", "trecqa_test"]
 
+    print searcher.search("Where is the volcano Mauna Loa?")
+
+    # results = []
+    # for dataset in datasets:
+    #     dataset_file = scorer_globals.DATASETS[dataset]
+    #     data = EvaluationQuery.queries_from_json_file(dataset_file)
+    #     for q in data:
+    #         print >> stderr, q.utterance
+    #         snippets = json.loads(searcher.search(q.utterance))
+    #         results.append({"question": q.utterance, "results": snippets})
+
+    with open("search_results.json", "w") as out:
+        json.dump(results, out)
     searcher.close()

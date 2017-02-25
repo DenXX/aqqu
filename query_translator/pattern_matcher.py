@@ -14,6 +14,8 @@ from alignment import WordEmbeddings, WordDerivations
 import globals
 import math
 
+from query_translator.answer_candidate import RelationMatch
+
 logger = logging.getLogger(__name__)
 
 CONTENT_POS_TAGS = {'NN', 'NNS', 'VB', 'VBD', 'VBN', 'VBZ', 'CD', 'NNP',
@@ -237,18 +239,17 @@ def filter_important_types(relation_target_types, relation_counts,
 
 
 class QueryPatternMatcher:
-    def __init__(self, query, extender, sparql_backend):
+    def __init__(self, extender, sparql_backend):
         self.extender = extender
-        self.query = query
         self.sparql_backend = sparql_backend
 
-    def construct_initial_query_candidates(self):
+    def construct_initial_query_candidates(self, query, seed_entities):
         query_candidates = []
-        for entity in self.query.identified_entities:
+        for entity in seed_entities:
             if isinstance(entity.entity, Value) or not entity.use_as_seed_entity:
                 logger.info("Ignoring %s as start entity." % entity.name)
                 continue
-            query_candidate = qc.QueryCandidate(self.query, self.sparql_backend)
+            query_candidate = qc.QueryCandidate(query, self.sparql_backend)
             entity_node = qc.QueryCandidateNode(entity.name, entity,
                                                 query_candidate)
             query_candidate.root_node = entity_node
@@ -257,11 +258,11 @@ class QueryPatternMatcher:
             query_candidates.append(query_candidate)
         return query_candidates
 
-    def match_ERT_pattern(self):
+    def match_ERT_pattern(self, query, seed_entities=None):
         logger.info("Matching ERT pattern.")
         start = time.time()
         pattern = [self.extender.extend_entity_with_target_relation]
-        query_candidates = self.construct_initial_query_candidates()
+        query_candidates = self.construct_initial_query_candidates(query, seed_entities)
         query_candidates = self.match_pattern(query_candidates, pattern)
         for query_candidate in query_candidates:
             query_candidate.pattern = "ERT"
@@ -270,7 +271,7 @@ class QueryPatternMatcher:
                                                           duration))
         return query_candidates
 
-    def match_ERMRT_pattern(self):
+    def match_ERMRT_pattern(self, query, seed_entities):
         """
         Get relations that go through a mediator node.
         """
@@ -280,9 +281,9 @@ class QueryPatternMatcher:
                      self.extender.extend_mediator_with_targetrelation]
         pattern_b = [
             self.extender.extend_entity_with_mediator_and_targetrelation]
-        query_candidates_a = self.construct_initial_query_candidates()
+        query_candidates_a = self.construct_initial_query_candidates(query, seed_entities)
         query_candidates_a = self.match_pattern(query_candidates_a, pattern_a)
-        query_candidates_b = self.construct_initial_query_candidates()
+        query_candidates_b = self.construct_initial_query_candidates(query, seed_entities)
         query_candidates_b = self.match_pattern(query_candidates_b, pattern_b)
         query_candidates = query_candidates_a + query_candidates_b
         for query_candidate in query_candidates:
@@ -293,7 +294,7 @@ class QueryPatternMatcher:
                                                     duration))
         return query_candidates
 
-    def match_ERMRERT_pattern(self):
+    def match_ERMRERT_pattern(self, query, seed_entities):
         """
         First find relations between a pair of mentioned entities in the question. Then add some other relation
         to the mediator node.
@@ -307,7 +308,7 @@ class QueryPatternMatcher:
         # Match the other pattern.
         pattern = [self.extender.extend_entity_with_mediator_and_entity,
                    self.extender.extend_mediator_with_targetrelation]
-        other_query_candidates = self.construct_initial_query_candidates()
+        other_query_candidates = self.construct_initial_query_candidates(query, seed_entities)
         other_query_candidates = self.match_pattern(other_query_candidates,
                                                     pattern)
         query_candidates = query_candidates + other_query_candidates
@@ -318,6 +319,12 @@ class QueryPatternMatcher:
             "ERMRERT matched %s times in %.2f ms." % (len(query_candidates),
                                                       duration))
         return query_candidates
+
+    def generate_pattern_candidates(self, query, entities):
+        ert_matches = self.match_ERT_pattern(query, entities)
+        ermrt_matches = self.match_ERMRT_pattern(query, entities)
+        ermrert_matches = self.match_ERMRERT_pattern(query, entities)
+        return ert_matches + ermrt_matches + ermrert_matches
 
     def match_pattern(self, query_candidates, pattern):
         """
@@ -524,7 +531,7 @@ class QueryCandidateExtender:
         relation_words = None
         if relation in self.relation_words:
             relation_words = self.relation_words[relation]
-        match = qc.RelationMatch(relation)
+        match = RelationMatch(relation)
         for t in tokens:
             lemmas = [t.lemma]
             if len(t.lemma.split('-')) > 1:
@@ -602,7 +609,7 @@ class QueryCandidateExtender:
             else:
                 relb_words = [(relation_b, {})]
         for rel_b, rel_words in relb_words:
-            match = qc.RelationMatch((relation_a, rel_b))
+            match = RelationMatch((relation_a, rel_b))
             rel_a_suffix_words = []
             rel_a_name_words = []
             rel_b_suffix_words = []
@@ -922,7 +929,7 @@ class QueryCandidateExtender:
                 if relation_matches:
                     match = relation_matches[0]
                 else:
-                    match = qc.RelationMatch((rel_a, rel_b))
+                    match = RelationMatch((rel_a, rel_b))
                 new_candidate = query_candidate.extend_with_relation_and_variable(
                     rel_a,
                     match,
@@ -1086,7 +1093,7 @@ class QueryCandidateExtender:
                 # Use unique objects as count
                 max_rel, max_count = max(target_relation_candidates,
                                          key=lambda x: x[1][2])
-                match = qc.RelationMatch(max_rel)
+                match = RelationMatch(max_rel)
                 match.add_count_match(max_count[2])
                 match.cardinality = max_count
                 new_query_candidate = query_candidate.extend_with_relation_and_variable(

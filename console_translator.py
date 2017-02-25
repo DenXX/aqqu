@@ -10,7 +10,7 @@ import logging
 import globals
 import scorer_globals
 import sys
-from query_translator.translator import SparqlQueryTranslator
+from query_translator.translator import SparqlQueryTranslator, CandidateGenerator
 
 logging.basicConfig(format="%(asctime)s : %(levelname)s "
                            ": %(module)s : %(message)s",
@@ -36,7 +36,7 @@ def main():
         logger.error("Valid rankers are: %s " % (" ".join(scorer_globals.scorers_dict.keys())))
     logger.info("Using ranker %s" % args.ranker_name)
     ranker = scorer_globals.scorers_dict[args.ranker_name]
-    translator = SparqlQueryTranslator.init_from_config()
+    translator = CandidateGenerator.get_from_config(globals.config)
     translator.set_scorer(ranker)
     while True:
         try:
@@ -57,7 +57,7 @@ def main():
             logger.info("---------------------------------------------------------")
             if len(results) > 0:
                 best_candidate = results[0].query_candidate
-                sparql_query = best_candidate.to_sparql_query()
+                sparql_query = best_candidate.get_candidate_query()
                 result_rows = results[0].query_result_rows
                 result = []
                 # Usually we get a name + mid.

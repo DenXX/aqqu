@@ -6,7 +6,7 @@ Elmar Haussmann <haussmann@cs.uni-freiburg.de>
 from query_translator import ranker
 from collections import OrderedDict
 
-from text2kb.web_answerer import QuaseWebAnswerer, BingWebAnswerer, SentAnswerer
+from text2kb.web_answerer import QuaseWebAnswerer, BingWebAnswerer, TextAnswerer
 
 free917_entities = "evaluation-data/free917_entities.txt"
 
@@ -375,9 +375,23 @@ def init():
                                     extract_clueweb_features_ranking=False,
                                     use_pruning=False),
 
+                   ranker.AccuModel('Aqqu_on_Yahoo_Ranker',
+                                    "yahoo_train_full",
+                                    ranking_n_estimators=100,
+                                    top_ngram_percentile=5,
+                                    rel_regularization_C=1.0,
+                                    use_type_model=False,
+                                    extract_text_features_pruning=False,
+                                    extract_text_features_ranking=False,
+                                    extract_cqa_features_pruning=False,
+                                    extract_cqa_features_ranking=False,
+                                    extract_clueweb_features_pruning=False,
+                                    extract_clueweb_features_ranking=False,
+                                    use_pruning=True),
+
                    QuaseWebAnswerer('AskMSR'),
                    BingWebAnswerer('BingSearchCount', entity_link_min_score=0.1, use_answers_cache=False),
-                   SentAnswerer('SentSearchCount'),
+                   TextAnswerer('SentSearchCount', "trecqa_train"),
                    ]
 
     # A dictionary used for lookup via scorer name.
@@ -544,7 +558,21 @@ def init():
           'trecqa.test.json'),
          ('trecqa_test_small',
           'evaluation-data/'
-          'trecqa.test_small.json')
+          'trecqa.test_small.json'),
+
+        # YAHOO FACTOID
+         ('yahoo_train_full',
+          'evaluation-data/'
+          'yahoofactoid.train_dev.json'),
+         ('yahoo_train',
+          'evaluation-data/'
+          'yahoofactoid.train.json'),
+         ('yahoo_dev',
+          'evaluation-data/'
+          'yahoofactoid.dev.json'),
+         ('yahoofactoid_test',
+          'evaluation-data/'
+          'yahoofactoid.test.json'),
 
          ]
     )

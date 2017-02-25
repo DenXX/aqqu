@@ -156,8 +156,8 @@ def entity_link_snippets():
 
 def test_new_entity_linker():
     globals.read_configuration('config.cfg')
-    from query_translator.translator import SparqlQueryTranslator
-    query_translator = SparqlQueryTranslator.init_from_config()
+    from query_translator.translator import CandidateGenerator
+    query_translator = CandidateGenerator.get_from_config(globals.config)
     while True:
         question = sys.stdin.readline().strip()
         print "Translation: ", query_translator.translate_query(question)

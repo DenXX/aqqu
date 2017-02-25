@@ -186,7 +186,7 @@ def evaluate_translator(translator, queries, n_queries=9999,
             candidate = result.query_candidate
             # Only want the readable name.
             result_strs = result.query_results_str
-            executed_sparql = candidate.to_sparql_query(include_name=True)
+            executed_sparql = candidate.get_candidate_query(include_name=True)
             eval_candidate = EvaluationCandidate(candidate,
                                                  executed_sparql,
                                                  result_strs)

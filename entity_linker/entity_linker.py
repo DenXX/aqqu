@@ -12,6 +12,8 @@ import re
 import operator
 import shelve
 import time
+from sets import ImmutableSet
+
 from Levenshtein._levenshtein import jaro_winkler
 
 from surface_index_memory import EntitySurfaceIndexMemory
@@ -128,7 +130,7 @@ class KBEntity(Entity):
             mid = mid.encode("utf-8")
         if mid in KBEntity._entity_names:
             return KBEntity._entity_names[mid]
-        return ""
+        return mid
 
     @staticmethod
     def get_notable_type(mid):
@@ -184,11 +186,11 @@ class KBEntity(Entity):
         if KBEntity._entity_ids is None:
             import globals
             import gzip
+            logger.info("Reading entity names...")
             KBEntity._entity_ids = shelve.open(globals.config.get('EntityLinker', 'entity-names-cache-file'))
             KBEntity._entity_names = shelve.open(globals.config.get('EntityLinker', 'entity-ids-cache-file'))
             if len(KBEntity._entity_ids) == 0:
                 names_file = globals.config.get('EntityLinker', 'entity-names-file')
-                logger.info("Reading entity names...")
                 with gzip.open(names_file, 'r') as input_file:
                     for index, line in enumerate(input_file):
                         triple = KBEntity.parse_freebase_string_triple(line)
@@ -199,7 +201,9 @@ class KBEntity(Entity):
                                 KBEntity._entity_ids[name_lower] = []
                             KBEntity._entity_ids[name_lower].append(triple[0])
                             KBEntity._entity_names[triple[0].encode("utf-8")] = name
-                logger.info("Done reading entity names.")
+                KBEntity._entity_ids.sync()
+                KBEntity._entity_names.sync()
+            logger.info("Done reading entity names.")
 
     @staticmethod
     def _read_entity_counts():
@@ -330,6 +334,9 @@ class IdentifiedEntity():
         self.name = name
         # The tokens that matched this entity.
         self.tokens = tokens
+        # Indexes of tokens
+        all_indexes = sorted([token.index for token in tokens])
+        self.indexes = (min(all_indexes), max(all_indexes))
         # A score for the match of those tokens.
         self.surface_score = surface_score
         # A popularity score of the entity.
@@ -388,6 +395,20 @@ class IdentifiedEntity():
 
     def prefixed_sparql_name(self, prefix):
         return self.entity.prefixed_sparql_name(prefix)
+
+    def __hash__(self):
+        return hash((self.name, self.indexes))
+
+    def __lt__(self, other):
+        return self.indexes < other.indexes
+
+    def __eq__(self, other):
+        return self.indexes == other.indexes
+
+    def __ne__(self, other):
+        # Not strictly necessary, but to avoid having both x==y and x!=y
+        # True at the same time
+        return not(self == other)
 
     def __unicode__(self):
         return self.as_string()

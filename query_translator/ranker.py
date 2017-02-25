@@ -11,6 +11,8 @@ import cPickle as pickle
 import time
 import logging
 import operator
+from abc import abstractmethod, ABCMeta
+
 import translator
 import random
 import globals
@@ -31,6 +33,8 @@ from query_translator.oracle import EntityOracle
 from features import FeatureExtractor
 
 from sklearn.cross_validation import KFold
+
+from query_translator.query_candidate import QueryCandidate
 
 RANDOM_SHUFFLE = 0.3
 N_JOBS = 1
@@ -90,8 +94,8 @@ class Ranker(object):
         :param y_candidate:
         :return:
         """
-        x_score = x_candidate.rank_score.score
-        y_score = y_candidate.rank_score.score
+        x_score = x_candidate.get_rank_score().score
+        y_score = y_candidate.get_rank_score().score
         return cmp(x_score, y_score)
 
     def rank_query_candidates(self, query_candidates, key=lambda x: x, utterance=""):
@@ -103,7 +107,7 @@ class Ranker(object):
         query_candidates = shuffle_candidates(query_candidates, key)
         for qc in query_candidates:
             candidate = key(qc)
-            candidate.rank_score = self.score(candidate)
+            candidate.set_rank_score(self.score(candidate))
         ranked_candidates = sorted(query_candidates,
                                    key=key,
                                    cmp=self.compare,
@@ -116,6 +120,8 @@ class Ranker(object):
 
 class MLModel(object):
     """Superclass for machine learning based scorer."""
+
+    __metaclass__ = ABCMeta
 
     def __init__(self, name, train_dataset):
         self.name = name
@@ -144,11 +150,24 @@ class MLModel(object):
                                        param_suffix)
         return model_filename
 
+    @abstractmethod
     def print_model(self):
         """Print info about the model.
 
         :return:
         """
+        pass
+
+    @abstractmethod
+    def learn_model(self, train_queries):
+        pass
+
+    @abstractmethod
+    def store_model(self):
+        pass
+
+    @abstractmethod
+    def load_model(self):
         pass
 
 
@@ -159,8 +178,7 @@ class AccuModel(MLModel, Ranker):
      using a random forest to decide which one should be ranked higher.
     """
 
-    def score(self, candidate):
-        pass
+    n_folds = 6
 
     def __init__(self, name,
                  train_dataset,
@@ -220,7 +238,6 @@ class AccuModel(MLModel, Ranker):
             self.same_feature_extractors = (extract_text_features_pruning == extract_text_features_ranking) and \
                                            (extract_clueweb_features_pruning == extract_clueweb_features_ranking) and \
                                            (extract_cqa_features_pruning == extract_cqa_features_ranking)
-
 
     def load_model(self):
         model_file = self.get_model_filename()
@@ -287,7 +304,7 @@ class AccuModel(MLModel, Ranker):
         prune_model.learn_model(labels, features)
         return prune_model
 
-    def learn_model(self, train_queries, n_folds=6):
+    def learn_model(self, train_queries):
         # split the training queries into folds
         # for each fold extract n-gram features (and select best ones)
         # also extract regular features
@@ -297,7 +314,7 @@ class AccuModel(MLModel, Ranker):
         # train the treepair classifier on the collected test-folds
         # train the relation classifier on the all relation-features
 
-        kf = KFold(len(train_queries), n_folds=n_folds, shuffle=True,
+        kf = KFold(len(train_queries), n_folds=AccuModel.n_folds, shuffle=True,
                    random_state=999)
         num_fold = 1
         pair_features = []
@@ -306,7 +323,7 @@ class AccuModel(MLModel, Ranker):
         labels = []
         for train, test in kf:
             logger.info("Training relation score model on fold %s/%s" % (
-                num_fold, n_folds))
+                num_fold, AccuModel.n_folds))
             test_fold = [train_queries[i] for i in test]
             train_fold = [train_queries[i] for i in train]
             rel_model = self.learn_rel_score_model(train_fold)
@@ -432,6 +449,9 @@ class AccuModel(MLModel, Ranker):
             self.pruner.store_model()
 
         logger.info("Done.")
+
+    def score(self, candidate):
+        pass
 
     def compare_pair(self, x_candidate, y_candidate):
         """Compare two candidates.
@@ -1070,12 +1090,12 @@ class SimpleScoreRanker(Ranker):
     def score(self, query_candidate):
         result_size = query_candidate.get_result_count()
         em_token_score = 0.0
-        for em in query_candidate.matched_entities:
+        for em in query_candidate.get_matched_entities():
             em_score = em.entity.surface_score
             em_score *= len(em.entity.tokens)
             em_token_score += em_score
         matched_tokens = dict()
-        for rm in query_candidate.matched_relations:
+        for rm in query_candidate.get_matched_relations():
             if rm.name_match:
                 for (t, _) in rm.name_match.token_names:
                     matched_tokens[t] = 0.3
@@ -1142,7 +1162,7 @@ class LiteralRankerFeatures(object):
         """
         for qc in query_candidates:
             candidate = key(qc)
-            candidate.rank_score = self.score(candidate)
+            candidate.set_rank_score(self.score(candidate))
         ranked_candidates = sorted(query_candidates,
                                    key=key,
                                    cmp=self.compare,
@@ -1182,9 +1202,9 @@ class LiteralRanker(Ranker):
         num_entity_matches = len(query_candidate.matched_entities)
         # Each pattern has a name.
         # An "M" indicates a mediator in the pattern.
-        if "M" in query_candidate.pattern:
+        if isinstance(query_candidate, QueryCandidate) and "M" in query_candidate.pattern:
             is_mediator = True
-        for em in query_candidate.matched_entities:
+        for em in query_candidate.get_matched_entities():
             # NEW(Hannah) 22-Mar-15:
             # For entities, also consider strong synonym matches (prob >= 0.8)
             #  as literal matches. This is important for a significant portion
@@ -1202,7 +1222,7 @@ class LiteralRanker(Ranker):
             if em.entity.score > 0:
                 em_popularity += math.log(em.entity.score)
         matched_tokens = dict()
-        for rm in query_candidate.matched_relations:
+        for rm in query_candidate.get_matched_relations():
             rm_relation_length += len(rm.relation)
             if rm.name_match:
                 literal_relations += 1
@@ -1235,7 +1255,7 @@ class LiteralRanker(Ranker):
                                      literal_length, em_popularity, is_mediator,
                                      rm_relation_length, cardinality,
                                      em_token_score, rm_token_score,
-                                     len(query_candidate.covered_tokens()),
+                                     len(query_candidate.get_covered_tokens()),
                                      result_size)
 
     def compare(self, x_candidate, y_candidate):
@@ -1246,8 +1266,8 @@ class LiteralRanker(Ranker):
         """
 
         # Get the score objects:
-        x = x_candidate.rank_score
-        y = y_candidate.rank_score
+        x = x_candidate.get_rank_score()
+        y = y_candidate.get_rank_score()
 
         # For entites, also count strong synonym matches (high "prob") as
         # literal matches, see HannahScorer.score(...) above.
@@ -1510,7 +1530,7 @@ def sort_query_candidates(candidates, key):
     :param candidates:
     :return:
     """
-    candidates = sorted(candidates, key=lambda qc: key(qc).to_sparql_query())
+    candidates = sorted(candidates, key=lambda qc: str(key(qc)))
     return candidates
 
 

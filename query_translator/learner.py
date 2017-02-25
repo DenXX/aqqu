@@ -183,11 +183,11 @@ def get_evaluated_queries(dataset, cached, parameters, n_top=2000):
     if not queries:
         # Note: we use the default scorer here, but with parameters
         # of the selected scorer.
-        translator = CandidateGenerator.get_from_config(globals.config)
         candidate_scorer = ranker.LiteralRanker('DefaultScorer')
         candidate_scorer.parameters = parameters
-        translator.set_scorer(candidate_scorer)
+        translator = CandidateGenerator.get_from_config(globals.config, candidate_scorer)
         queries = load_eval_queries(dataset)
+
         # We evaluate the queries here, so that in subsequent runs, we already
         # know which candidate is correct etc. and do not have to perform the
         # same calculations again.
@@ -243,6 +243,7 @@ def test(scorer_name, test_dataset, cached, avg_runs=1):
     :return:
     """
     scorer_obj = scorer_globals.scorers_dict[scorer_name]
+
     # Not all rankers are MLModels
     if isinstance(scorer_obj, MLModel):
         scorer_obj.load_model()
