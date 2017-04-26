@@ -1,8 +1,10 @@
+from tqdm import tqdm
+
 from corenlp_parser.parser import CoreNLPParser
 from entity_linker.entity_linker import EntityLinker, WebSearchResultsExtenderEntityLinker
 from query_translator import translator
 from query_translator.evaluation import load_eval_queries
-from text2kb.utils import tokenize, get_questions_serps
+from text2kb.utils import tokenize, get_questions_serps, WebSearchResult
 
 __author__ = 'dsavenk'
 
@@ -84,15 +86,11 @@ def main_doc_entities_from_content():
     from text2kb.utils import get_questions_serps
     question_search_results = get_questions_serps()
     documents_content = get_documents_content_dict(return_parsed_tokens=True)
-    index = 0
-    for serp in question_search_results.itervalues():
+    for serp in tqdm(question_search_results.values()):
         for doc in serp[:globals.SEARCH_RESULTS_TOPN]:
             if doc.url in documents_content:
                 doc_entities[doc.url] = entity_linker.identify_entities_in_document(documents_content[doc.url],
                                                                                     min_surface_score=0.5)
-        index += 1
-        if index % 100 == 0:
-            logger.info("%d SERPs processed" % index)
     with open(document_entities_file, 'wx') as out:
         pickle.dump(doc_entities, out)
 
@@ -139,7 +137,9 @@ def entity_link_snippets():
     doc_snippet_entities = dict()
     for index, serp in enumerate(question_search_results.itervalues()):
         for doc in serp[:globals.SEARCH_RESULTS_TOPN]:
-            snippet_tokens = doc.get_snippet_tokens()
+            snippet_tokens = doc.get_snippet_tokens(skip_parsing=False)
+            if not snippet_tokens:
+                continue
             entities = entity_linker.identify_entities_in_document(snippet_tokens)
             for entity in entities:
                 entity['matches'] = []
@@ -218,16 +218,14 @@ def main_parse():
     document_content_file = globals.config.get('WebSearchFeatures', 'documents-content-file')
     parser = CoreNLPParser.init_from_config()
     question_serps = get_questions_serps()
-    print datetime.now()
     with open(document_content_file, 'wx') as out_file:
         index = 0
-        for serp in question_serps.itervalues():
+        for serp in tqdm(question_serps.values()):
             for doc in serp[:10]:
                 content = doc.content()
                 if len(content) > 0:
-                    document = (doc.url, parser.parse(content))
+                    document = (doc.url, parser.parse(content[:10000]))
                     pickle.dump(document, out_file)
-            print "Query #", index, datetime.now()
             index += 1
 
 
@@ -253,9 +251,8 @@ if __name__ == "__main__":
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- GET DOCUMENT CONTENT ENTITIES: END
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- GET DOCUMENT SNIPPET ENTITIES: BEGIN
-    #entity_link_snippets()
+    # entity_link_snippets()
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- GET DOCUMENT SNIPPET ENTITIES: END
-
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     # globals.read_configuration('config.cfg')

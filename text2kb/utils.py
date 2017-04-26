@@ -155,11 +155,12 @@ def get_documents_content_dict(return_parsed_tokens=False):
             while True:
                 try:
                     url, content = pickle.load(content_input)
-                    if not return_parsed_tokens:
-                        tokens = [(token.token.lower(), token.lemma.lower()) for token in content.tokens]
-                        _documents_content[url] = tokens
-                    else:
-                        _documents_content[url] = content.tokens
+                    if content:
+                        if not return_parsed_tokens:
+                            tokens = [(token.token.lower(), token.lemma.lower()) for token in content.tokens]
+                            _documents_content[url] = tokens
+                        else:
+                            _documents_content[url] = content.tokens
                 except (EOFError, pickle.UnpicklingError):
                     break
                 index += 1
@@ -253,6 +254,8 @@ class Similarity:
     @staticmethod
     def cosine_similarity(elem_type, vect1, answer_vector):
         res = 0.0
+        if not answer_vector or not vect1:
+            return res
         for key in answer_vector._elems.iterkeys():
             if key in vect1._elems:
                 value = answer_vector._elems[key]
@@ -323,6 +326,7 @@ class Similarity:
             return 10
         else:
             raise NotImplementedError
+
 
 class WebSearchResult:
     """
@@ -401,14 +405,18 @@ class WebSearchResult:
             self.token_to_pos, self.lemma_to_pos = WebSearchResult._get_tokens2pos_from_tokens(self.parsed_content())
         return self.token_to_pos, self.lemma_to_pos
 
-    def get_snippet_tokens(self):
+    def get_snippet_tokens(self, skip_parsing=True):
         if self.snippet_tokens is None:
-            self.snippet_tokens = [Token(token) for token in tokenize(self.title + u'\n' + self.snippet)]
-            for token in self.snippet_tokens:
-                token.lemma = token.token
-            # Skip parsing for performance
-            # parser = globals.get_parser()
-            # self.snippet_tokens = parser.parse(self.title + u'\n' + self.snippet).tokens
+            if skip_parsing:
+                self.snippet_tokens = [Token(token) for token in tokenize(self.title + u'\n' + self.snippet)]
+                for token in self.snippet_tokens:
+                    token.lemma = token.token
+            else:
+                # Skip parsing for performance
+                parser = globals.get_parser()
+                parse = parser.parse(self.title + u'\n' + self.snippet)
+                if parse:
+                    self.snippet_tokens = parse.tokens
         return self.snippet_tokens
 
     def get_snippet_token2pos(self):
@@ -425,12 +433,14 @@ class WebSearchResult:
         logger.warning("Didn't find cached document snippet entities.")
         # If we didn't find snippet entities in cache, use entity linker.
         if self.snippet_entities is None:
-            entity_linker = globals.get_entity_linker()
-            self.snippet_entities = dict(
-                (entity['name'].lower(), entity)
-                for entity in entity_linker.identify_entities_in_document(self.get_snippet_tokens(),
-                                                                          max_token_window=4,
-                                                                          min_surface_score=0.5))
+            self.snippet_entities = {}
+            if not doc_snippet_entities:
+                entity_linker = globals.get_entity_linker()
+                self.snippet_entities = dict(
+                    (entity['name'].lower(), entity)
+                    for entity in entity_linker.identify_entities_in_document(self.get_snippet_tokens(skip_parsing=False),
+                                                                              max_token_window=4,
+                                                                              min_surface_score=0.5))
         return self.snippet_entities
 
     def get_snippet_entities_to_pos(self):
@@ -443,9 +453,9 @@ class WebSearchResult:
         """
         try:
             from os import path
-            if path.isfile(self.document_location):
+            if self.document_location and path.isfile(self.document_location):
                 import codecs
-                with codecs.open(self.document_location, 'r', 'utf-8') as input_document:
+                with open(self.document_location, 'r') as input_document:
                     content = input_document.read()
                     text = justext.justext(content, justext.get_stoplist("English"))
                     res = []
@@ -464,6 +474,7 @@ class WebSearchResult:
                 logger.warning("Document not found: " + str(self.document_location))
         except Exception as exc:
             logger.warning(exc)
+            raise
         return ""
 
     @staticmethod

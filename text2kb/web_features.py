@@ -314,6 +314,6 @@ if __name__ == "__main__":
     logging.basicConfig(format='%(asctime)s : %(levelname)s '
                                ': %(module)s : %(message)s',
                         level=logging.INFO)
-    globals.read_configuration('config_wikipedia.cfg')
+    globals.read_configuration('config_yahoofactoid.cfg')
     serps = get_questions_serps()
     create_document_vectors_cache(serps.keys())

@@ -388,6 +388,19 @@ def init():
                                     extract_clueweb_features_pruning=False,
                                     extract_clueweb_features_ranking=False,
                                     use_pruning=True),
+                   ranker.AccuModel('Text2KB_on_Yahoo_Ranker',
+                                    "yahoo_train_full_ext",
+                                    ranking_n_estimators=100,
+                                    top_ngram_percentile=5,
+                                    rel_regularization_C=1.0,
+                                    use_type_model=True,
+                                    extract_text_features_pruning=False,
+                                    extract_text_features_ranking=True,
+                                    extract_cqa_features_pruning=False,
+                                    extract_cqa_features_ranking=True,
+                                    extract_clueweb_features_pruning=False,
+                                    extract_clueweb_features_ranking=True,
+                                    use_pruning=True),
 
                    QuaseWebAnswerer('AskMSR'),
                    BingWebAnswerer('BingSearchCount', entity_link_min_score=0.1, use_answers_cache=False),
@@ -570,9 +583,16 @@ def init():
          ('yahoo_dev',
           'evaluation-data/'
           'yahoofactoid.dev.json'),
-         ('yahoofactoid_test',
+         ('yahoo_test',
           'evaluation-data/'
           'yahoofactoid.test.json'),
+
+         ('yahoo_train_full_ext',
+          'evaluation-data/'
+          'yahoofactoid.train_dev_ext.json'),
+         ('yahoo_test_ext',
+          'evaluation-data/'
+          'yahoofactoid.test_ext.json'),
 
          ]
     )

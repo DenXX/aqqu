@@ -12,6 +12,9 @@ import urllib
 import urllib2
 import time
 from collections import defaultdict
+
+from unidecode import unidecode
+
 import globals
 
 logger = logging.getLogger(__name__)
@@ -49,17 +52,21 @@ class CoreNLPParser(object):
         :return:
         """
         logger.debug(u"Parsing '{0}'.".format(query))
+        query = unidecode(query).encode('utf-8')
         t0 = time.time()
-        value = {"text": query.encode('utf-8')}
+        value = {"text": query}
         data = urllib.urlencode(value)
         req = urllib2.Request(self.host, data)
         response = urllib2.urlopen(req).read()
-        parse_result = parse_json_result(response,
-                                         include_json=include_json,
-                                         parse_trees=parse_trees)
-        duration = (time.time() - t0) * 1000
-        logger.debug("Parse took %.2f ms." % duration)
-        return parse_result
+        if response:
+            parse_result = parse_json_result(response,
+                                             include_json=include_json,
+                                             parse_trees=parse_trees)
+            duration = (time.time() - t0) * 1000
+            logger.debug("Parse took %.2f ms." % duration)
+            return parse_result
+        logger.warning("Cannot parse {}".format(query))
+        return None
 
 
 def extract_tokens_from_json(result):

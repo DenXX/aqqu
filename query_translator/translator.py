@@ -90,6 +90,8 @@ class CandidateGenerator(object):
         # Parse query.
         results = []
         queries_candidates = self.generate_candidates(query)
+        if queries_candidates is None:
+            return results
         logger.info("Ranking %s query candidates" % len(queries_candidates))
         ranker = self.get_scorer()
         ranked_candidates = ranker.rank_query_candidates(queries_candidates)
@@ -168,8 +170,11 @@ class EntityBasedCandidateGenerator(CandidateGenerator):
         :param entity_oracle:
         :return:
         """
-        # Parse query.
-        parse_result = self.parser.parse(query_text)
+        try:
+            # Parse query.
+            parse_result = self.parser.parse(query_text)
+        except:
+            return None
         tokens = parse_result.tokens
         # Create a query object.
         query = Query(query_text)
@@ -187,6 +192,8 @@ class EntityBasedCandidateGenerator(CandidateGenerator):
 
     def generate_candidates(self, query_text):
         query = self.parse_and_identify_entities(query_text)
+        if query is None:
+            return None
         # Set the relation oracle.
         query.relation_oracle = self.get_scorer().get_parameters().relation_oracle
         # Identify the target type.

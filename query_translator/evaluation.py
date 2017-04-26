@@ -217,7 +217,8 @@ def write_result_output(queries, output_file="eval_out.log"):
     :return:
     """
     logger.info("Writing results to %s." % output_file)
-    with open(output_file, 'w') as f:
+    import codecs
+    with codecs.open(output_file, 'w', encoding="utf8") as f:
         for q in queries:
             q_text = q.utterance
             result_text = json.dumps(q.target_result)
